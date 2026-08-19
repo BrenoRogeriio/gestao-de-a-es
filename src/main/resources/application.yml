@@ -1,0 +1,41 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gestao-acoes
+
+  # Banco de dados H2 em memória para desenvolvimento rápido
+  datasource:
+    url: jdbc:h2:mem:gestaoacoesdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driverClassName: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      # O Hibernate NÃO vai criar as tabelas. O Flyway fará isso.
+      ddl-auto: validate
+    show-sql: true
+
+  # Habilita o painel web do banco H2 (acessível em http://localhost:8080/h2-console)
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  # Configuração do Flyway para gerenciar os scripts SQL
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+
+# Configurações de API Externas
+app:
+  market-data:
+    us-provider: twelve-data
+    brapi:
+      token: "utHt5Db2TZLTN1hcxcR7Ld"
+    twelve-data:
+      apikey: "7d2b5d825b744360b498a80740b63563"
