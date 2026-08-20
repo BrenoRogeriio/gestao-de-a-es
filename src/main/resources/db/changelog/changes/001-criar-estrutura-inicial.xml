@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- 1. Tabela Ações -->
+    <changeSet id="001-criar-tabela-acoes" author="aluno">
+        <createTable tableName="acoes">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_acoes" nullable="false"/>
+            </column>
+            <column name="ticker" type="VARCHAR(10)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_acoes_ticker"/>
+            </column>
+            <column name="nome_empresa" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cotacao_atual" type="DECIMAL(19,4)"/>
+            <column name="data_hora_cotacao" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="mercado" type="VARCHAR(50)"/>
+            <column name="moeda" type="VARCHAR(20)"/>
+            <column name="provedor_origem" type="VARCHAR(50)"/>
+        </createTable>
+    </changeSet>
+
+    <!-- 2. Tabela Corretoras (100% igual à sua classe Java) -->
+    <changeSet id="002-criar-tabela-corretoras" author="aluno">
+        <createTable tableName="corretoras">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_corretoras" nullable="false"/>
+            </column>
+            <column name="cnpj" type="VARCHAR(14)">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_corretoras_cnpj"/>
+            </column>
+            <column name="razao_social" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="nome_fantasia" type="VARCHAR(255)"/>
+            <column name="email" type="VARCHAR(255)"/>
+            <column name="telefone" type="VARCHAR(50)"/>
+            <column name="cep" type="VARCHAR(8)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="logradouro" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="numero" type="VARCHAR(50)"/>
+            <column name="complemento" type="VARCHAR(255)"/>
+            <column name="bairro" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="cidade" type="VARCHAR(255)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="uf" type="VARCHAR(2)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="situacao_cadastral" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status_cvm" type="VARCHAR(50)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="data_hora_cadastro" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <!-- 3. Tabela Posições -->
+    <changeSet id="003-criar-tabela-posicoes" author="aluno">
+        <createTable tableName="posicoes">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_posicoes" nullable="false"/>
+            </column>
+            <column name="acao_id" type="BIGINT">
+                <constraints nullable="false" unique="true" uniqueConstraintName="uk_posicoes_acao"/>
+            </column>
+            <column name="quantidade" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="preco_medio" type="DECIMAL(19,4)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+                baseTableName="posicoes"
+                baseColumnNames="acao_id"
+                referencedTableName="acoes"
+                referencedColumnNames="id"
+                constraintName="fk_posicao_acao"/>
+    </changeSet>
+
+    <!-- 4. Tabela Transações -->
+    <changeSet id="004-criar-tabela-transacoes" author="aluno">
+        <createTable tableName="transacoes">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true" primaryKeyName="pk_transacoes" nullable="false"/>
+            </column>
+            <column name="acao_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="corretora_id" type="BIGINT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="tipo_transacao" type="VARCHAR(20)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="quantidade" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="valor_unitario" type="DECIMAL(19,4)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="data_hora_transacao" type="TIMESTAMP WITH TIME ZONE">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <addForeignKeyConstraint
+                baseTableName="transacoes"
+                baseColumnNames="acao_id"
+                referencedTableName="acoes"
+                referencedColumnNames="id"
+                constraintName="fk_transacao_acao"/>
+
+        <addForeignKeyConstraint
+                baseTableName="transacoes"
+                baseColumnNames="corretora_id"
+                referencedTableName="corretoras"
+                referencedColumnNames="id"
+                constraintName="fk_transacao_corretora"/>
+    </changeSet>
+
+</databaseChangeLog>
