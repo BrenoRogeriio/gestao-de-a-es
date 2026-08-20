@@ -1,5 +1,6 @@
 package com.jeferson.gestaoacoes.service;
 
+import com.jeferson.gestaoacoes.dto.HistoricoResponseDTO;
 import com.jeferson.gestaoacoes.dto.PosicaoResponseDTO;
 import com.jeferson.gestaoacoes.dto.TransacaoRequestDTO;
 import com.jeferson.gestaoacoes.exception.RegraNegocioException;
@@ -38,26 +39,29 @@ public class CarteiraService {
         Acao acao = buscarAcao(dto.acaoId());
         Corretora corretora = buscarCorretora(dto.corretoraId());
 
-        // Pega o preço REAL da bolsa neste exato momento para executar a ordem
-        BigDecimal precoExecucao = acao.getCotacaoAtual();
+        // Pega o preço exato que o usuário digitou na boleta (Front-end)
+        BigDecimal precoCompra = dto.valorUnitario();
 
-        // 1. Salva o Histórico
-        salvarTransacao(acao, corretora, TipoTransacao.COMPRA, dto.quantidade(), precoExecucao);
+        salvarTransacao(acao, corretora, TipoTransacao.COMPRA, dto.quantidade(), precoCompra);
 
-        // 2. Atualiza a Posição (Preço Médio)
         Posicao posicao = posicaoRepository.findByAcaoId(acao.getId()).orElse(new Posicao());
-        if (posicao.getId() == null) {
+
+        // REGRA DA RECEITA FEDERAL: Média Ponderada nas Compras
+        if (posicao.getId() == null || posicao.getQuantidade() == 0) {
             posicao.setAcao(acao);
             posicao.setQuantidade(dto.quantidade());
-            posicao.setPrecoMedio(precoExecucao);
+            posicao.setPrecoMedio(precoCompra);
         } else {
-            BigDecimal totalAntigo = posicao.getPrecoMedio().multiply(new BigDecimal(posicao.getQuantidade()));
-            BigDecimal totalNovo = precoExecucao.multiply(new BigDecimal(dto.quantidade()));
+            BigDecimal financeiroAntigo = posicao.getPrecoMedio().multiply(new BigDecimal(posicao.getQuantidade()));
+            BigDecimal financeiroNovo = precoCompra.multiply(new BigDecimal(dto.quantidade()));
 
-            Integer novaQuantidade = posicao.getQuantidade() + dto.quantidade();
-            BigDecimal novoPrecoMedio = (totalAntigo.add(totalNovo)).divide(new BigDecimal(novaQuantidade), 4, RoundingMode.HALF_UP);
+            Integer quantidadeTotal = posicao.getQuantidade() + dto.quantidade();
 
-            posicao.setQuantidade(novaQuantidade);
+            // Calcula o novo Preço Médio (Financeiro Total / Quantidade Total)
+            BigDecimal novoPrecoMedio = (financeiroAntigo.add(financeiroNovo))
+                    .divide(new BigDecimal(quantidadeTotal), 4, RoundingMode.HALF_UP);
+
+            posicao.setQuantidade(quantidadeTotal);
             posicao.setPrecoMedio(novoPrecoMedio);
         }
         posicaoRepository.save(posicao);
@@ -67,27 +71,36 @@ public class CarteiraService {
     public void registrarVenda(TransacaoRequestDTO dto) {
         Acao acao = buscarAcao(dto.acaoId());
         Corretora corretora = buscarCorretora(dto.corretoraId());
-
-        // Preço REAL da bolsa para a venda
-        BigDecimal precoExecucao = acao.getCotacaoAtual();
+        BigDecimal precoVenda = dto.valorUnitario();
 
         Posicao posicao = posicaoRepository.findByAcaoId(acao.getId())
                 .orElseThrow(() -> new RegraNegocioException("Você não possui posição nesta ação para vender."));
 
         if (posicao.getQuantidade() < dto.quantidade()) {
-            throw new RegraNegocioException("Quantidade insuficiente. Você possui apenas " + posicao.getQuantidade() + " ações de " + acao.getTicker());
+            throw new RegraNegocioException("Quantidade insuficiente. Você possui apenas " + posicao.getQuantidade() + " ações.");
         }
 
-        // 1. Salva o Histórico
-        salvarTransacao(acao, corretora, TipoTransacao.VENDA, dto.quantidade(), precoExecucao);
+        // REGRA DA RECEITA FEDERAL: Venda gera Apuração de Resultado (Lucro/Prejuízo Realizado)
+        // O Preço Médio da posição NÃO SE ALTERA durante a venda.
+        BigDecimal precoMedioDeCusto = posicao.getPrecoMedio();
 
-        // 2. Atualiza a Posição
+        // Exemplo para falar na apresentação: "Calculamos o lucro subtraindo o custo médio do preço de venda"
+        BigDecimal lucroOuPrejuizoPorAcao = precoVenda.subtract(precoMedioDeCusto);
+        BigDecimal resultadoFinanceiroDaOperacao = lucroOuPrejuizoPorAcao.multiply(new BigDecimal(dto.quantidade()));
+
+        salvarTransacao(acao, corretora, TipoTransacao.VENDA, dto.quantidade(), precoVenda);
+
+        // Atualiza o saldo de ações na carteira
         posicao.setQuantidade(posicao.getQuantidade() - dto.quantidade());
 
+        // Se vendeu tudo, o preço médio zera para não impactar recompras futuras
         if (posicao.getQuantidade() == 0) {
             posicao.setPrecoMedio(BigDecimal.ZERO);
         }
+
         posicaoRepository.save(posicao);
+
+        // Nota: O 'resultadoFinanceiroDaOperacao' poderia ser salvo no banco para o relatório de DARF (Imposto de Renda).
     }
 
     public List<PosicaoResponseDTO> listarPosicoes() {
@@ -135,5 +148,19 @@ public class CarteiraService {
 
     private Corretora buscarCorretora(Long id) {
         return corretoraRepository.findById(id).orElseThrow(() -> new RegraNegocioException("Corretora não encontrada."));
+    }
+    // Importe java.util.Comparator se pedir!
+    public List<HistoricoResponseDTO> listarHistorico() {
+        return transacaoRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing(Transacao::getDataHoraTransacao).reversed())
+                .map(t -> new HistoricoResponseDTO(
+                        t.getTipoTransacao().name(),
+                        t.getAcao().getTicker(),
+                        t.getCorretora().getCnpj(),
+                        t.getQuantidade(),
+                        t.getValorUnitario(),
+                        t.getValorUnitario().multiply(new BigDecimal(t.getQuantidade())),
+                        t.getDataHoraTransacao()
+                )).toList();
     }
 }
