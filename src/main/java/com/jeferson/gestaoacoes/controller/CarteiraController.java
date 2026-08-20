@@ -1,5 +1,6 @@
 package com.jeferson.gestaoacoes.controller;
 
+import com.jeferson.gestaoacoes.dto.HistoricoResponseDTO;
 import com.jeferson.gestaoacoes.dto.PosicaoResponseDTO;
 import com.jeferson.gestaoacoes.dto.TransacaoRequestDTO;
 import com.jeferson.gestaoacoes.service.CarteiraService;
@@ -35,5 +36,10 @@ public class CarteiraController {
     @GetMapping("/posicao")
     public ResponseEntity<List<PosicaoResponseDTO>> verPosicao() {
         return ResponseEntity.ok(carteiraService.listarPosicoes());
+    }
+
+    @GetMapping("/historico")
+    public ResponseEntity<List<HistoricoResponseDTO>> listarHistorico() {
+        return ResponseEntity.ok(carteiraService.listarHistorico());
     }
 }
