@@ -18,7 +18,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/acoes")
-@CrossOrigin(origins = "*")
 public class AcaoController {
 
     private final AcaoService service;

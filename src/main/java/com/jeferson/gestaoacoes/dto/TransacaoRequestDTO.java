@@ -1,8 +1,10 @@
 package com.jeferson.gestaoacoes.dto;
 
-import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 public record TransacaoRequestDTO(
         @NotNull(message = "O ID da ação é obrigatório")
@@ -12,9 +14,18 @@ public record TransacaoRequestDTO(
         Long corretoraId,
 
         @NotNull(message = "A quantidade é obrigatória")
-        @Min(value = 1, message = "A quantidade deve ser no mínimo 1")
+        @Positive(message = "A quantidade deve ser maior que zero")
         Integer quantidade,
 
         @NotNull(message = "O preço de execução é obrigatório")
-        BigDecimal valorUnitario
-) {}
+        @Positive(message = "O preço de execução deve ser maior que zero")
+        @Digits(integer = 15, fraction = 4,
+                message = "O preço de execução deve ter no máximo 15 dígitos inteiros e 4 casas decimais")
+        BigDecimal valorUnitario,
+
+        LocalDate data
+) {
+    public TransacaoRequestDTO(Long acaoId, Long corretoraId, Integer quantidade, BigDecimal valorUnitario) {
+        this(acaoId, corretoraId, quantidade, valorUnitario, null);
+    }
+}

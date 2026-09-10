@@ -8,18 +8,44 @@ API REST desenvolvida em Java 21 com Spring Boot 3 para o cadastro e gestão de 
 * **Spring Boot 3.3.0** (Web, Data JPA, Validation)
 * **Spring Cloud OpenFeign** (Integrações REST HTTP)
 * **PostgreSQL & H2 Database** (Persistência)
-* **Flyway** (Migrations e Versionamento de Banco)
+* **Liquibase** (Migrations e Versionamento de Banco)
 * **JUnit 5 & Mockito** (Testes Automatizados)
 * **Springdoc OpenAPI** (Swagger UI para Documentação)
 
+## Requisitos e build
+
+Para executar localmente, instale um **JDK 21 ou superior** e configure `JAVA_HOME` para
+essa instalação. O Maven Wrapper versionado no projeto fixa a versão do Maven e deve ser
+preferido no lugar de uma instalação global.
+
+No Windows:
+
+```powershell
+.\mvnw.cmd test
+.\mvnw.cmd spring-boot:run
+```
+
+No Linux/macOS:
+
+```bash
+./mvnw test
+./mvnw spring-boot:run
+```
+
+O build via Docker usa Maven e Java 21 dentro da própria imagem, sem depender do JDK ou
+do Maven instalados na máquina host.
+
 ## ⚙️ Configuração e Execução (Desenvolvimento)
 
-O projeto está configurado para rodar imediatamente utilizando um banco de dados H2 em memória. Nenhuma infraestrutura adicional é necessária para iniciar a aplicação localmente.
+O profile `dev` usa PostgreSQL e carrega os dados de demonstração do Liquibase. Defina
+`SPRING_PROFILES_ACTIVE=dev`, `DB_PASSWORD`, `BRAPI_TOKEN` e `TWELVE_DATA_API_KEY` no
+ambiente do processo. `DB_URL` e `DB_USERNAME` são opcionais no desenvolvimento e usam,
+respectivamente, `jdbc:postgresql://localhost:5432/gestao_acoes` e `postgres` como padrão.
 
-1. Clone o repositório.
-2. Abra o projeto no IntelliJ IDEA.
-3. Aguarde o Maven baixar as dependências (`pom.xml`).
-4. Execute a classe principal: `GestaoAcoesApplication.java`.
+O Spring Boot não carrega o arquivo `.env` automaticamente. Em execução direta via Maven
+ou IDE, configure as variáveis no terminal ou na configuração de execução. Para executar
+com Docker, copie `.env.example` para `.env`, substitua todos os placeholders e use
+`docker compose up --build`; o Compose lê o `.env` e repassa as variáveis ao backend.
 
 A aplicação estará disponível em: `http://localhost:8080`
 
@@ -45,13 +71,20 @@ A aplicação consome as seguintes APIs isoladas por adaptadores (Ports and Adap
 
 ## 🔒 Variáveis de Ambiente
 
-Para o MVP e testes locais, as chaves das APIs financeiras não são obrigatórias, mas para operações intensivas, você deve configurar as seguintes variáveis (ou adicioná-las no `application.yml`):
+Os profiles `dev` e `prod` recebem credenciais exclusivamente por configuração externa:
 
-* `app.market-data.brapi.token`: Seu token da Brapi.
-* `app.market-data.twelve-data.apikey`: Sua API Key da Twelve Data.
+* `DB_URL`, `DB_USERNAME` e `DB_PASSWORD`: conexão PostgreSQL (`prod` exige as três);
+* `BRAPI_TOKEN`: token da Brapi;
+* `TWELVE_DATA_API_KEY`: chave da Twelve Data.
+
+O profile `prod` não possui fallback para essas variáveis, desativa `show-sql` e não executa
+os dados demo. Não coloque segredos no `application.yml`, no Compose ou no `.env.example`.
 
 **Atenção:** Nunca versione segredos no código-fonte.
 
 ## 🧪 Testes
 
 Os testes automatizados foram construídos usando JUnit 5 e Mockito. Eles simulam as respostas das APIs externas para garantir que a suíte de testes seja rápida, determinística e **não consuma as cotas** dos provedores de dados do mercado financeiro.
+
+Execute o comando de teste do Maven Wrapper indicado acima. A suíte ativa automaticamente o profile `test`, usa um banco H2 isolado,
+não carrega dados demo e não exige PostgreSQL nem credenciais de APIs externas.

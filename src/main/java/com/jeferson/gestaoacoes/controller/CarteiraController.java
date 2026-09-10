@@ -2,6 +2,7 @@ package com.jeferson.gestaoacoes.controller;
 
 import com.jeferson.gestaoacoes.dto.HistoricoResponseDTO;
 import com.jeferson.gestaoacoes.dto.PosicaoResponseDTO;
+import com.jeferson.gestaoacoes.dto.ResumoCarteiraResponseDTO;
 import com.jeferson.gestaoacoes.dto.TransacaoRequestDTO;
 import com.jeferson.gestaoacoes.service.CarteiraService;
 import jakarta.validation.Valid;
@@ -12,7 +13,6 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/carteira")
-@CrossOrigin(origins = "*")
 public class CarteiraController {
 
     private final CarteiraService carteiraService;
@@ -22,20 +22,29 @@ public class CarteiraController {
     }
 
     @PostMapping("/comprar")
-    public ResponseEntity<Void> comprar(@Valid @RequestBody TransacaoRequestDTO dto) {
-        carteiraService.registrarCompra(dto);
+    public ResponseEntity<Void> comprar(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody TransacaoRequestDTO dto) {
+        carteiraService.registrarCompra(dto, idempotencyKey);
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/vender")
-    public ResponseEntity<Void> vender(@Valid @RequestBody TransacaoRequestDTO dto) {
-        carteiraService.registrarVenda(dto);
+    public ResponseEntity<Void> vender(
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @Valid @RequestBody TransacaoRequestDTO dto) {
+        carteiraService.registrarVenda(dto, idempotencyKey);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/posicao")
     public ResponseEntity<List<PosicaoResponseDTO>> verPosicao() {
         return ResponseEntity.ok(carteiraService.listarPosicoes());
+    }
+
+    @GetMapping("/resumo")
+    public ResponseEntity<List<ResumoCarteiraResponseDTO>> verResumo() {
+        return ResponseEntity.ok(carteiraService.resumirCarteiraPorMoeda());
     }
 
     @GetMapping("/historico")

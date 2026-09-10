@@ -1,176 +1,247 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Check, CheckCircle2, Info, LoaderCircle, RotateCcw, ShoppingCart, TrendingDown, X } from 'lucide-react';
+import { consultarAcoes } from '../services/acoes.js';
+import { consultarCarteira, registrarOperacao } from '../services/carteira.js';
+import { consultarCorretoras } from '../services/corretoras.js';
+import { gerarChaveIdempotencia, obterTentativaIdempotente, prepararOperacao } from '../utils/carteira.js';
+import { rotuloOpcaoCorretora } from '../utils/corretoras.js';
+import { formatarMoeda, simboloMoeda } from '../utils/financeiro.js';
+import {
+    criarFormularioLancamento,
+    criarModeloLancamentos,
+    descricaoSaldoVenda,
+    limparLancamentoConcluido,
+    obterQuantidadeDisponivel,
+    rotuloOpcaoAcao,
+    selecionarAcao,
+    validarLancamento
+} from '../utils/lancamentos.js';
+import Card from './ui/Card.jsx';
+import ErrorState from './ui/ErrorState.jsx';
+import LoadingState from './ui/LoadingState.jsx';
+import PageHeader from './ui/PageHeader.jsx';
+
+async function consultarDadosLancamento(signal) {
+    const [resultadoAcoes, resultadoCorretoras, resultadoCarteira] = await Promise.all([
+        consultarAcoes(signal),
+        consultarCorretoras(signal),
+        consultarCarteira(signal)
+    ]);
+    return {
+        acoes: resultadoAcoes.acoes,
+        corretoras: resultadoCorretoras.corretoras,
+        posicoes: resultadoCarteira.posicoes
+    };
+}
 
 export default function HomeBroker() {
-    const [listaAcoes, setListaAcoes] = useState([]);
-    const [listaCorretoras, setListaCorretoras] = useState([]); // <- NOVO: Lista de Corretoras
+    const [dados, setDados] = useState({ acoes: [], corretoras: [], posicoes: [] });
+    const [form, setForm] = useState(() => criarFormularioLancamento());
+    const [carregando, setCarregando] = useState(true);
+    const [erroCarga, setErroCarga] = useState(false);
+    const [enviando, setEnviando] = useState(false);
+    const [erros, setErros] = useState({});
+    const [feedback, setFeedback] = useState(null);
+    const tentativaRef = useRef(null);
+    const enviandoRef = useRef(false);
+    const ativoRef = useRef(null);
 
-    const hoje = new Date().toISOString().split('T')[0];
-
-    const [form, setForm] = useState({
-        tipo: 'COMPRA',
-        tipoAtivo: 'Ações',
-        acaoId: '',
-        corretoraId: '', // <- NOVO: Agora começa vazio para você selecionar
-        data: hoje,
-        quantidade: 1,
-        preco: 0.00
-    });
+    const carregar = async signal => {
+        setCarregando(true);
+        setErroCarga(false);
+        try {
+            setDados(await consultarDadosLancamento(signal));
+        } catch (falha) {
+            if (falha.name !== 'AbortError') setErroCarga(true);
+        } finally {
+            if (!signal?.aborted) setCarregando(false);
+        }
+    };
 
     useEffect(() => {
-        // Busca Ações
-        fetch('http://localhost:8080/acoes', { cache: 'no-store' })
-            .then(res => res.json())
-            .then(dados => {
-                const lista = dados.content ? dados.content : dados;
-                if (Array.isArray(lista)) setListaAcoes(lista);
+        const controller = new AbortController();
+        consultarDadosLancamento(controller.signal)
+            .then(resultado => {
+                setDados(resultado);
+                setErroCarga(false);
             })
-            .catch(erro => console.error(erro));
-
-        // Busca Corretoras
-        fetch('http://localhost:8080/corretoras', { cache: 'no-store' })
-            .then(res => res.json())
-            .then(dados => {
-                const lista = dados.content ? dados.content : dados;
-                if (Array.isArray(lista)) setListaCorretoras(lista);
+            .catch(falha => {
+                if (falha.name !== 'AbortError') setErroCarga(true);
             })
-            .catch(erro => console.error(erro));
+            .finally(() => {
+                if (!controller.signal.aborted) setCarregando(false);
+            });
+        return () => controller.abort();
     }, []);
 
-    const handleAcaoChange = (e) => {
-        const idSelecionado = e.target.value;
-        const acaoEncontrada = listaAcoes.find(a => a.id.toString() === idSelecionado);
-        setForm({
-            ...form,
-            acaoId: idSelecionado,
-            preco: acaoEncontrada ? acaoEncontrada.cotacaoAtual : 0
-        });
+    const modelo = criarModeloLancamentos({ loading: carregando, error: erroCarga, ...dados });
+
+    const atualizarCampo = (campo, valor) => {
+        setForm(atual => ({ ...atual, [campo]: valor }));
+        setErros(atuais => ({ ...atuais, [campo]: undefined }));
+        setFeedback(null);
+        tentativaRef.current = null;
     };
 
-    const enviarOperacao = (e) => {
-        e.preventDefault();
-        if (!form.acaoId) return alert("Selecione um ativo!");
-        if (!form.corretoraId) return alert("Selecione uma corretora!");
-        if (form.quantidade <= 0) return alert("A quantidade deve ser maior que zero!");
+    const alterarTipo = tipo => {
+        setForm(atual => ({ ...atual, tipo }));
+        setErros({});
+        setFeedback(null);
+        tentativaRef.current = null;
+    };
 
-        const endpoint = form.tipo === 'COMPRA' ? '/carteira/comprar' : '/carteira/vender';
+    const alterarAcao = evento => {
+        const acao = dados.acoes.find(item => String(item.id) === evento.target.value);
+        setForm(atual => selecionarAcao(atual, acao));
+        setErros(atuais => ({ ...atuais, acaoId: undefined, preco: undefined, quantidade: undefined }));
+        setFeedback(null);
+        tentativaRef.current = null;
+    };
 
-        // Tratamento de segurança para o preço (garante que envia com ponto, não vírgula)
-        const precoFormatado = parseFloat(form.preco.toString().replace(',', '.'));
+    const limpar = () => {
+        setForm(atual => criarFormularioLancamento({ tipo: atual.tipo }));
+        setErros({});
+        setFeedback(null);
+        tentativaRef.current = null;
+        ativoRef.current?.focus();
+    };
 
-        fetch(`http://localhost:8080${endpoint}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                acaoId: parseInt(form.acaoId, 10),
-                corretoraId: parseInt(form.corretoraId, 10),
-                quantidade: parseInt(form.quantidade, 10),
-                valorUnitario: precoFormatado
-            })
-        }).then(res => {
-            if (res.ok) {
-                alert(`✅ Lançamento de ${form.tipo} adicionado com sucesso!`);
-                setForm({ ...form, acaoId: '', quantidade: 1, preco: 0 });
-            } else {
-                alert("❌ Erro: Verifique se você possui saldo/ações suficientes ou revise os dados.");
+    const enviar = async evento => {
+        evento.preventDefault();
+        if (enviandoRef.current) return;
+        const validacao = validarLancamento(form, dados.posicoes);
+        setErros(validacao);
+        if (Object.keys(validacao).length > 0) return;
+
+        const payload = prepararOperacao(form);
+        const tentativa = obterTentativaIdempotente(tentativaRef.current, payload, gerarChaveIdempotencia);
+        tentativaRef.current = tentativa;
+        enviandoRef.current = true;
+        setEnviando(true);
+        setFeedback(null);
+        const acao = dados.acoes.find(item => String(item.id) === form.acaoId);
+
+        try {
+            await registrarOperacao(form.tipo, payload, tentativa.chave);
+            setFeedback({ tone: 'success', message: `${form.tipo === 'VENDA' ? 'Venda' : 'Compra'} de ${acao?.ticker ?? 'ativo'} registrada com sucesso.` });
+            setForm(atual => limparLancamentoConcluido(atual));
+            setErros({});
+            tentativaRef.current = null;
+            try {
+                const carteira = await consultarCarteira();
+                setDados(atuais => ({ ...atuais, posicoes: carteira.posicoes }));
+            } catch {
+                setFeedback({ tone: 'warning', message: 'Lançamento registrado, mas não foi possível atualizar as posições agora.' });
             }
-        }).catch(erro => console.error(erro));
+            window.setTimeout(() => ativoRef.current?.focus(), 0);
+        } catch (falha) {
+            setFeedback({ tone: 'error', message: falha.message || 'Não foi possível registrar a operação.' });
+        } finally {
+            enviandoRef.current = false;
+            setEnviando(false);
+        }
     };
 
-    const valorTotal = (Number(form.quantidade) * Number(form.preco));
-    const formatarMoeda = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+    if (modelo.estado === 'loading') return <LoadingState title="Carregando lançamentos" description="Buscando ativos, corretoras e posições disponíveis." />;
+    if (modelo.estado === 'error') return <ErrorState title="Não foi possível preparar o lançamento" description="Verifique a conexão com o servidor e tente novamente." onRetry={() => carregar()} />;
+
+    const saldoVenda = descricaoSaldoVenda(form, dados.posicoes);
+    const quantidadeDisponivel = obterQuantidadeDisponivel(dados.posicoes, form.acaoId);
+    const valorTotal = Number(form.quantidade) * Number(String(form.preco).replace(',', '.'));
+    const semAcoes = dados.acoes.length === 0;
+    const semCorretoras = dados.corretoras.length === 0;
 
     return (
-        <div className="card-padrao" style={{ maxWidth: '700px', margin: '0 auto', padding: '0', borderRadius: '16px' }}>
+        <div className="launch-page">
+            <PageHeader title="Registrar lançamento" description="Registre compras e vendas executadas na sua carteira." />
 
-            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '18px', fontWeight: '600' }}>Adicionar Lançamento</h3>
-            </div>
-
-            <form onSubmit={enviarOperacao} style={{ padding: '24px' }}>
-
-                {/* COMPRA E VENDA */}
-                <div style={{ display: 'flex', background: 'var(--hover-row)', borderRadius: '12px', padding: '4px', marginBottom: '24px' }}>
-                    <button
-                        type="button"
-                        onClick={() => setForm({...form, tipo: 'COMPRA'})}
-                        style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s', background: form.tipo === 'COMPRA' ? 'var(--bg-card)' : 'transparent', color: form.tipo === 'COMPRA' ? '#10b981' : 'var(--text-muted)', boxShadow: form.tipo === 'COMPRA' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>
-                        <span>💰</span> Compra
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={() => setForm({...form, tipo: 'VENDA'})}
-                        style={{ flex: 1, padding: '10px', border: 'none', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'all 0.2s', background: form.tipo === 'VENDA' ? 'var(--bg-card)' : 'transparent', color: form.tipo === 'VENDA' ? '#ef4444' : 'var(--text-muted)', boxShadow: form.tipo === 'VENDA' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}>
-                        <span>📈</span> Venda
-                    </button>
+            {(semAcoes || semCorretoras) && (
+                <div className="inline-feedback feedback-warning" role="status">
+                    <Info size={18} aria-hidden="true" />
+                    <span>{semAcoes ? 'Cadastre ao menos um ativo antes de registrar uma operação.' : 'Cadastre ao menos uma corretora antes de registrar uma operação.'}</span>
                 </div>
+            )}
 
-                {/* GRID DE CAMPOS RESPONSIVO */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
+            {feedback && (
+                <div className={`inline-feedback feedback-${feedback.tone}`} role={feedback.tone === 'success' ? 'status' : 'alert'}>
+                    {feedback.tone === 'success' && <CheckCircle2 size={18} aria-hidden="true" />}
+                    <span>{feedback.message}</span>
+                    <button type="button" onClick={() => setFeedback(null)} aria-label="Fechar mensagem"><X size={16} aria-hidden="true" /></button>
+                </div>
+            )}
 
+            <Card className="launch-card">
+                <header className="launch-card-header">
                     <div>
-                        <label className="lbl-form">Tipo de ativo</label>
-                        <select className="input-moderno" value={form.tipoAtivo} onChange={e => setForm({...form, tipoAtivo: e.target.value})} disabled>
-                            <option value="Ações">Ações</option>
-                        </select>
+                        <span className="section-eyebrow">Nova movimentação</span>
+                        <h2>Dados da operação</h2>
+                        <p>Informe os dados da ordem executada pela instituição financeira.</p>
+                    </div>
+                    <span className={`launch-kind-badge is-${form.tipo.toLowerCase()}`}>{form.tipo === 'VENDA' ? 'Venda' : 'Compra'}</span>
+                </header>
+
+                <form className="launch-form" onSubmit={enviar} noValidate>
+                    <div className="segmented-control launch-type" role="group" aria-label="Tipo de operação">
+                        <button className={`segmented-button is-buy ${form.tipo === 'COMPRA' ? 'is-active' : ''}`} type="button" aria-pressed={form.tipo === 'COMPRA'} disabled={enviando} onClick={() => alterarTipo('COMPRA')}><ShoppingCart size={17} aria-hidden="true" /> Comprar</button>
+                        <button className={`segmented-button is-sell ${form.tipo === 'VENDA' ? 'is-active' : ''}`} type="button" aria-pressed={form.tipo === 'VENDA'} disabled={enviando} onClick={() => alterarTipo('VENDA')}><TrendingDown size={17} aria-hidden="true" /> Vender</button>
                     </div>
 
-                    <div>
-                        <label className="lbl-form">Ativo</label>
-                        <select className="input-moderno" required value={form.acaoId} onChange={handleAcaoChange}>
-                            <option value="" disabled>Selecionar Ação...</option>
-                            {listaAcoes.map(acao => (
-                                <option key={acao.id} value={acao.id}>{acao.ticker} - {acao.nomeEmpresa}</option>
-                            ))}
-                        </select>
-                    </div>
+                    <div className="launch-form-grid">
+                        <div className="form-field-full">
+                            <label className="lbl-form" htmlFor="launch-asset">Ativo</label>
+                            <select ref={ativoRef} className="input-moderno" id="launch-asset" value={form.acaoId} disabled={enviando || semAcoes} aria-invalid={Boolean(erros.acaoId)} aria-describedby={erros.acaoId ? 'launch-asset-error' : undefined} onChange={alterarAcao}>
+                                <option value="">Selecione um ativo</option>
+                                {dados.acoes.map(acao => <option key={acao.id} value={acao.id}>{rotuloOpcaoAcao(acao)}</option>)}
+                            </select>
+                            {erros.acaoId && <span className="field-error" id="launch-asset-error">{erros.acaoId}</span>}
+                            {saldoVenda && <span className={`launch-field-helper ${quantidadeDisponivel === 0 ? 'tone-negative' : ''}`}>{saldoVenda}</span>}
+                        </div>
 
-                    <div style={{ gridColumn: '1 / -1' }}>
-                        <label className="lbl-form">Instituição Financeira (Corretora)</label>
-                        <select className="input-moderno" required value={form.corretoraId} onChange={e => setForm({...form, corretoraId: e.target.value})}>
-                            <option value="" disabled>Selecionar Corretora...</option>
-                            {listaCorretoras.map(c => (
-                                <option key={c.id} value={c.id}>CNPJ: {c.cnpj} - {c.email}</option>
-                            ))}
-                        </select>
-                    </div>
+                        <div className="form-field-full">
+                            <label className="lbl-form" htmlFor="launch-broker">Instituição financeira</label>
+                            <select className="input-moderno" id="launch-broker" value={form.corretoraId} disabled={enviando || semCorretoras} aria-invalid={Boolean(erros.corretoraId)} aria-describedby={erros.corretoraId ? 'launch-broker-error' : undefined} onChange={evento => atualizarCampo('corretoraId', evento.target.value)}>
+                                <option value="">Selecione uma corretora</option>
+                                {dados.corretoras.map(corretora => <option key={corretora.id} value={corretora.id}>{rotuloOpcaoCorretora(corretora)}</option>)}
+                            </select>
+                            {erros.corretoraId && <span className="field-error" id="launch-broker-error">{erros.corretoraId}</span>}
+                        </div>
 
-                    <div>
-                        <label className="lbl-form">Data da transação</label>
-                        <input className="input-moderno" type="date" required value={form.data} onChange={e => setForm({...form, data: e.target.value})} />
-                    </div>
+                        <div>
+                            <label className="lbl-form" htmlFor="launch-quantity">Quantidade</label>
+                            <input className="input-moderno" id="launch-quantity" type="number" min="1" max={form.tipo === 'VENDA' && form.acaoId ? quantidadeDisponivel : undefined} step="1" value={form.quantidade} disabled={enviando} aria-invalid={Boolean(erros.quantidade)} aria-describedby={erros.quantidade ? 'launch-quantity-error' : undefined} onChange={evento => atualizarCampo('quantidade', evento.target.value)} />
+                            {erros.quantidade && <span className="field-error" id="launch-quantity-error">{erros.quantidade}</span>}
+                        </div>
 
-                    <div>
-                        <label className="lbl-form">Quantidade</label>
-                        <input className="input-moderno" type="number" required min="1" value={form.quantidade} onChange={e => setForm({...form, quantidade: e.target.value})} />
-                    </div>
+                        <div>
+                            <label className="lbl-form" htmlFor="launch-date">Data da operação <span className="label-optional">(opcional)</span></label>
+                            <input className="input-moderno" id="launch-date" type="date" value={form.data} disabled={enviando} aria-invalid={Boolean(erros.data)} aria-describedby={erros.data ? 'launch-date-error' : undefined} onChange={evento => atualizarCampo('data', evento.target.value)} />
+                            {erros.data && <span className="field-error" id="launch-date-error">{erros.data}</span>}
+                        </div>
 
-                    <div>
-                        <label className="lbl-form">Preço unitário</label>
-                        <div style={{ display: 'flex', border: '1px solid var(--input-border)', borderRadius: '10px', overflow: 'hidden', background: 'var(--input-bg)' }}>
-                            <span style={{ padding: '12px 14px', background: 'var(--hover-row)', borderRight: '1px solid var(--input-border)', color: 'var(--text-muted)', fontWeight: '600' }}>R$</span>
-                            <input type="number" step="0.01" style={{ flex: 1, border: 'none', padding: '12px 14px', background: 'transparent', color: 'var(--text-main)', outline: 'none', fontSize: '15px' }} value={form.preco} onChange={e => setForm({...form, preco: e.target.value})} />
+                        <div className="form-field-full">
+                            <label className="lbl-form" htmlFor="launch-price">Valor unitário</label>
+                            <div className={`input-with-prefix ${erros.preco ? 'input-invalid' : ''}`}>
+                                <span className="input-prefix">{simboloMoeda(form.moeda)}</span>
+                                <input id="launch-price" type="number" min="0.0001" step="0.0001" value={form.preco} disabled={enviando} aria-invalid={Boolean(erros.preco)} aria-describedby={erros.preco ? 'launch-price-error' : undefined} onChange={evento => atualizarCampo('preco', evento.target.value)} />
+                            </div>
+                            {erros.preco && <span className="field-error" id="launch-price-error">{erros.preco}</span>}
                         </div>
                     </div>
 
-                </div>
+                    <div className="launch-summary" aria-live="polite">
+                        <div><span>Tipo</span><strong>{form.tipo === 'VENDA' ? 'Venda' : 'Compra'}</strong></div>
+                        <div><span>Valor total informado</span><strong>{Number.isFinite(valorTotal) ? formatarMoeda(valorTotal, form.moeda) : '—'}</strong></div>
+                    </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--hover-row)', padding: '20px', borderRadius: '12px', marginTop: '30px', border: '1px solid var(--border-color)' }}>
-                    <span style={{ color: 'var(--text-main)', fontWeight: '600', fontSize: '16px' }}>Valor total</span>
-                    <span style={{ color: 'var(--text-main)', fontWeight: '700', fontSize: '20px' }}>{formatarMoeda(valorTotal)}</span>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '30px' }}>
-                    <button type="button" onClick={() => setForm({...form, acaoId: '', corretoraId: '', quantidade: 1, preco: 0})} style={{ background: 'transparent', border: '1px solid var(--border-color)', padding: '12px 24px', borderRadius: '8px', color: 'var(--text-main)', fontWeight: '600', cursor: 'pointer', transition: 'all 0.2s' }}>
-                        Cancelar
-                    </button>
-
-                    <button type="submit" style={{ background: '#6366f1', border: 'none', padding: '12px 24px', borderRadius: '8px', color: 'white', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', transition: 'all 0.2s' }}>
-                        + Adicionar Lançamento
-                    </button>
-                </div>
-
-            </form>
+                    <footer className="launch-actions">
+                        <button className="button button-secondary" type="button" disabled={enviando} onClick={limpar}><RotateCcw size={17} aria-hidden="true" /> Limpar</button>
+                        <button className="button button-primary" type="submit" disabled={enviando || semAcoes || semCorretoras}>
+                            {enviando ? <LoaderCircle className="is-spinning" size={17} aria-hidden="true" /> : <Check size={17} aria-hidden="true" />}
+                            {enviando ? 'Registrando…' : `Confirmar ${form.tipo === 'VENDA' ? 'venda' : 'compra'}`}
+                        </button>
+                    </footer>
+                </form>
+            </Card>
         </div>
     );
 }

@@ -38,6 +38,15 @@ public class Transacao {
     @Column(name = "valor_unitario", nullable = false, precision = 19, scale = 4)
     private BigDecimal valorUnitario;
 
+    @Column(name = "preco_medio_operacao", precision = 19, scale = 4)
+    private BigDecimal precoMedioOperacao;
+
+    @Column(name = "resultado_realizado", precision = 29, scale = 4)
+    private BigDecimal resultadoRealizado;
+
     @Column(name = "data_hora_transacao", nullable = false)
     private OffsetDateTime dataHoraTransacao;
+
+    @Column(name = "idempotency_key", length = 100, unique = true)
+    private String idempotencyKey;
 }

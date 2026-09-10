@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="006-ajustar-ticker-mercado-acoes" author="jeferson">
+        <preConditions onFail="HALT" onError="HALT"
+                       onFailMessage="Existem acoes sem mercado. Informe o mercado correto desses registros antes de executar esta migration; nenhum valor sera preenchido automaticamente.">
+            <sqlCheck expectedResult="0">SELECT COUNT(*) FROM acoes WHERE mercado IS NULL</sqlCheck>
+        </preConditions>
+
+        <modifyDataType tableName="acoes" columnName="ticker" newDataType="VARCHAR(20)"/>
+        <addNotNullConstraint tableName="acoes" columnName="mercado" columnDataType="VARCHAR(50)"/>
+
+        <!-- Cria a protecao composta antes de remover a unicidade antiga. -->
+        <addUniqueConstraint tableName="acoes" columnNames="ticker, mercado"
+                             constraintName="uk_acao_ticker_mercado"/>
+        <dropUniqueConstraint tableName="acoes" constraintName="uk_acoes_ticker"/>
+
+        <!-- Sem rollback automatico: restaurar a unicidade global ou reduzir o ticker
+             poderia rejeitar dados validos cadastrados depois desta migration. -->
+    </changeSet>
+</databaseChangeLog>

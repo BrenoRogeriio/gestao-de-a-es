@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="007-validar-valores-transacoes-posicoes" author="jeferson">
+        <preConditions onFail="HALT" onError="HALT"
+                       onFailMessage="Existem quantidades ou valores monetarios invalidos. Corrija os dados legados antes de executar esta migration; nenhum registro sera alterado automaticamente.">
+            <sqlCheck expectedResult="0">
+                SELECT
+                    (SELECT COUNT(*) FROM posicoes WHERE quantidade &lt; 0) +
+                    (SELECT COUNT(*) FROM transacoes WHERE quantidade &lt;= 0 OR valor_unitario &lt;= 0)
+            </sqlCheck>
+        </preConditions>
+
+        <sql dbms="postgresql,h2">
+            ALTER TABLE posicoes
+                ADD CONSTRAINT ck_posicoes_quantidade_nao_negativa CHECK (quantidade &gt;= 0)
+        </sql>
+        <sql dbms="postgresql,h2">
+            ALTER TABLE transacoes
+                ADD CONSTRAINT ck_transacoes_quantidade_positiva CHECK (quantidade &gt; 0)
+        </sql>
+        <sql dbms="postgresql,h2">
+            ALTER TABLE transacoes
+                ADD CONSTRAINT ck_transacoes_valor_unitario_positivo CHECK (valor_unitario &gt; 0)
+        </sql>
+    </changeSet>
+</databaseChangeLog>

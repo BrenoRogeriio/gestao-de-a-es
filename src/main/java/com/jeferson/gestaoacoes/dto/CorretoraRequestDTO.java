@@ -7,7 +7,10 @@ import jakarta.validation.constraints.Size;
 
 public record CorretoraRequestDTO(
         @NotBlank(message = "O CNPJ é obrigatório")
-        @Pattern(regexp = "\\d{14}", message = "O CNPJ deve conter exatamente 14 dígitos numéricos")
+        @Pattern(
+                regexp = "(?:\\d{14}|\\d{2}\\.\\d{3}\\.\\d{3}/\\d{4}-\\d{2})",
+                message = "O CNPJ deve conter 14 dígitos, com ou sem formatação"
+        )
         String cnpj,
 
         @NotBlank(message = "O CEP é obrigatório")

@@ -5,5 +5,10 @@
         xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
 
     <include file="changes/001-criar-estrutura-inicial.xml" relativeToChangelogFile="true"/>
+    <include file="changes/002-inserir-dados-teste.xml" relativeToChangelogFile="true" contextFilter="@demo"/>
+    <include file="changes/003-ajustar-ticker-mercado-acoes.xml" relativeToChangelogFile="true"/>
+    <include file="changes/004-validar-valores-transacoes-posicoes.xml" relativeToChangelogFile="true"/>
+    <include file="changes/005-adicionar-idempotencia-transacoes.xml" relativeToChangelogFile="true"/>
+    <include file="changes/006-adicionar-resultados-financeiros-transacoes.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

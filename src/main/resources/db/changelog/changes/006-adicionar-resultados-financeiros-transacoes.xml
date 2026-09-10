@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <changeSet id="009-adicionar-resultados-financeiros-transacoes" author="jeferson">
+        <addColumn tableName="transacoes">
+            <column name="preco_medio_operacao" type="DECIMAL(19,4)"/>
+            <column name="resultado_realizado" type="DECIMAL(29,4)"/>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

@@ -10,6 +10,7 @@ public interface TwelveDataClient {
     @GetMapping("/quote")
     TwelveDataResponse consultarCotacao(
             @RequestParam("symbol") String symbol,
+            @RequestParam("country") String country,
             @RequestParam("apikey") String apiKey
     );
 }

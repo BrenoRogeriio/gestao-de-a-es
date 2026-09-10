@@ -7,5 +7,9 @@ public record TwelveDataResponse(
         String name,
         String currency,
         BigDecimal close,
-        Long timestamp
+        Long timestamp,
+        String exchange,
+        Integer code,
+        String message,
+        String status
 ) {}

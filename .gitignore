@@ -36,3 +36,7 @@ build/
 .env
 .env.*
 !.env.example
+### Ferramentas locais ###
+.codex/
+graphify-out/
+AGENTS.md

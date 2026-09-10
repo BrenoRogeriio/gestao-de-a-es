@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.27.xsd">
+
+    <!-- Cadastrando Corretoras via SQL puro -->
+    <changeSet id="005-inserir-corretoras-teste" author="aluno">
+        <sql>
+            INSERT INTO corretoras (cnpj, razao_social, nome_fantasia, email, telefone, cep, logradouro, numero, bairro, cidade, uf, situacao_cadastral, status_cvm, data_hora_cadastro)
+            VALUES ('02332886000104', 'XP Investimentos CCTVM S.A.', 'XP Investimentos', 'atendimento@xpi.com.br', '40033710', '04538133', 'Av. Brigadeiro Faria Lima', '3600', 'Itaim Bibi', 'Sao Paulo', 'SP', 'ATIVA', 'REGULAR', '2024-01-01 10:00:00-03');
+
+            INSERT INTO corretoras (cnpj, razao_social, nome_fantasia, email, telefone, cep, logradouro, numero, bairro, cidade, uf, situacao_cadastral, status_cvm, data_hora_cadastro)
+            VALUES ('00000000000191', 'Banco do Brasil S.A.', 'BB Investimentos', 'contato@bb.com.br', '08007290001', '70040912', 'SAUN Quadra 5', 'S/N', 'Asa Norte', 'Brasilia', 'DF', 'ATIVA', 'REGULAR', '2024-01-01 10:00:00-03');
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>
