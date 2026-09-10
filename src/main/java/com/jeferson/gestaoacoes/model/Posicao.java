@@ -19,10 +19,14 @@ public class Posicao {
     @EqualsAndHashCode.Include
     private Long id;
 
-    // Relação 1 para 1: Cada Ação cadastrada terá apenas uma Posição consolidada
-    @OneToOne(optional = false)
-    @JoinColumn(name = "acao_id", unique = true, nullable = false)
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "acao_id", nullable = false)
     private Acao acao;
+
+    // Nullable no banco apenas para preservar registros anteriores à autenticação.
+    @ManyToOne
+    @JoinColumn(name = "usuario_id")
+    private Usuario usuario;
 
     @Column(nullable = false)
     private Integer quantidade;

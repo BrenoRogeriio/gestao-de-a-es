@@ -2,11 +2,14 @@ package com.jeferson.gestaoacoes.service;
 
 import com.jeferson.gestaoacoes.dto.TransacaoRequestDTO;
 import com.jeferson.gestaoacoes.exception.RegraNegocioException;
+import com.jeferson.gestaoacoes.model.Usuario;
+import com.jeferson.gestaoacoes.security.UsuarioAtualService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.boot.test.mock.mockito.MockBean;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -23,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:carteira-concorrencia;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000",
@@ -40,7 +44,11 @@ class CarteiraConcorrenciaIntegrationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @MockBean
+    private UsuarioAtualService usuarioAtualService;
+
     private Long corretoraId;
+    private Long usuarioId;
 
     @BeforeEach
     void limparOperacoes() {
@@ -48,6 +56,7 @@ class CarteiraConcorrenciaIntegrationTest {
         jdbc.update("DELETE FROM posicoes");
         jdbc.update("DELETE FROM acoes");
         jdbc.update("DELETE FROM corretoras");
+        jdbc.update("DELETE FROM usuarios");
         jdbc.update("""
                 INSERT INTO corretoras (cnpj, razao_social, cep, logradouro, bairro, cidade, uf,
                                          situacao_cadastral, status_cvm, data_hora_cadastro)
@@ -55,6 +64,17 @@ class CarteiraConcorrenciaIntegrationTest {
                         'Bairro do teste', 'Sao Paulo', 'SP', 'ATIVA', 'REGULAR', CURRENT_TIMESTAMP)
                 """);
         corretoraId = jdbc.queryForObject("SELECT MIN(id) FROM corretoras", Long.class);
+        jdbc.update("""
+                INSERT INTO usuarios (nome, email, senha_hash, perfil, ativo, data_hora_cadastro)
+                VALUES ('Usuario concorrencia', 'concorrencia@example.com',
+                        '$2a$10$hashapenasparatestedebancodedados0000000000000000000',
+                        'USER', TRUE, CURRENT_TIMESTAMP)
+                """);
+        usuarioId = jdbc.queryForObject("SELECT id FROM usuarios", Long.class);
+        Usuario usuario = new Usuario();
+        usuario.setId(usuarioId);
+        when(usuarioAtualService.obterReferencia()).thenReturn(usuario);
+        when(usuarioAtualService.obterId()).thenReturn(usuarioId);
     }
 
     @Test
@@ -204,9 +224,9 @@ class CarteiraConcorrenciaIntegrationTest {
 
     private void assertPosicao(Long acaoId, int quantidade, String precoMedio) {
         assertEquals(quantidade, jdbc.queryForObject(
-                "SELECT quantidade FROM posicoes WHERE acao_id = ?", Integer.class, acaoId));
+                "SELECT quantidade FROM posicoes WHERE usuario_id = ? AND acao_id = ?", Integer.class, usuarioId, acaoId));
         BigDecimal atual = jdbc.queryForObject(
-                "SELECT preco_medio FROM posicoes WHERE acao_id = ?", BigDecimal.class, acaoId);
+                "SELECT preco_medio FROM posicoes WHERE usuario_id = ? AND acao_id = ?", BigDecimal.class, usuarioId, acaoId);
         assertEquals(0, new BigDecimal(precoMedio).compareTo(atual));
     }
 }

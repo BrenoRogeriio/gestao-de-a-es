@@ -2,7 +2,9 @@ package com.jeferson.gestaoacoes.integration;
 
 import com.jeferson.gestaoacoes.dto.TransacaoRequestDTO;
 import com.jeferson.gestaoacoes.exception.RegraNegocioException;
+import com.jeferson.gestaoacoes.model.Usuario;
 import com.jeferson.gestaoacoes.repository.AcaoRepository;
+import com.jeferson.gestaoacoes.security.UsuarioAtualService;
 import com.jeferson.gestaoacoes.service.CarteiraService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -10,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -37,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Testcontainers
@@ -73,9 +77,20 @@ class PostgresTestcontainersIntegrationTest {
     @Autowired
     private TransactionTemplate transactionTemplate;
 
+    @MockBean
+    private UsuarioAtualService usuarioAtualService;
+
+    private Long usuarioId;
+
     @BeforeEach
     void limparBancoTemporario() {
         jdbc.execute("TRUNCATE TABLE transacoes, posicoes, acoes, corretoras, usuarios RESTART IDENTITY CASCADE");
+        inserirUsuario("proprietario@example.com");
+        usuarioId = jdbc.queryForObject("SELECT id FROM usuarios WHERE email = 'proprietario@example.com'", Long.class);
+        Usuario usuario = new Usuario();
+        usuario.setId(usuarioId);
+        when(usuarioAtualService.obterReferencia()).thenReturn(usuario);
+        when(usuarioAtualService.obterId()).thenReturn(usuarioId);
     }
 
     @Test
@@ -83,16 +98,23 @@ class PostgresTestcontainersIntegrationTest {
         assertTrue(jdbc.queryForObject("SELECT version()", String.class).startsWith("PostgreSQL 17"));
         assertEquals(POSTGRES.getDatabaseName(),
                 jdbc.queryForObject("SELECT current_database()", String.class));
-        assertEquals(9, contar("SELECT COUNT(*) FROM databasechangelog"));
-        assertEquals(6, contar("""
+        assertEquals(10, contar("SELECT COUNT(*) FROM databasechangelog"));
+        assertEquals(9, contar("""
                 SELECT COUNT(*)
                   FROM pg_constraint
                  WHERE conname IN ('uk_acao_ticker_mercado',
                                    'ck_posicoes_quantidade_nao_negativa',
                                    'ck_transacoes_quantidade_positiva',
                                    'ck_transacoes_valor_unitario_positivo',
-                                   'uk_transacoes_idempotency_key',
-                                   'uk_usuarios_email')
+                                   'uk_posicoes_usuario_acao',
+                                   'uk_transacoes_usuario_idempotency_key',
+                                   'uk_usuarios_email',
+                                   'fk_posicao_usuario',
+                                   'fk_transacao_usuario')
+                """));
+        assertEquals(0, contar("""
+                SELECT COUNT(*) FROM pg_constraint
+                 WHERE conname IN ('uk_posicoes_acao', 'uk_transacoes_idempotency_key')
                 """));
         assertEquals("timestamp with time zone", tipoColuna("acoes", "data_hora_cotacao"));
         assertEquals("timestamp with time zone", tipoColuna("transacoes", "data_hora_transacao"));
@@ -106,6 +128,31 @@ class PostgresTestcontainersIntegrationTest {
         assertEquals(20, tamanhoMaximo("acoes", "ticker"));
         assertEquals(100, tamanhoMaximo("transacoes", "idempotency_key"));
         assertEquals(254, tamanhoMaximo("usuarios", "email"));
+    }
+
+    @Test
+    void deveAplicarPropriedadeEIdempotenciaPorUsuarioNoPostgres() {
+        inserirUsuario("segundo@example.com");
+        Long segundoUsuarioId = jdbc.queryForObject(
+                "SELECT id FROM usuarios WHERE email = 'segundo@example.com'", Long.class);
+        Long acaoId = inserirAcao("MULT3", "BRASIL");
+        Long corretoraId = inserirCorretora();
+
+        inserirPosicao(usuarioId, acaoId);
+        inserirPosicao(segundoUsuarioId, acaoId);
+        assertEquals(2, contar("SELECT COUNT(*) FROM posicoes WHERE acao_id = ?", acaoId));
+        assertThrows(DataIntegrityViolationException.class, () -> inserirPosicao(usuarioId, acaoId));
+
+        inserirTransacao(usuarioId, acaoId, corretoraId, "chave-compartilhada");
+        inserirTransacao(segundoUsuarioId, acaoId, corretoraId, "chave-compartilhada");
+        assertEquals(2, contar(
+                "SELECT COUNT(*) FROM transacoes WHERE idempotency_key = 'chave-compartilhada'"));
+        assertThrows(DataIntegrityViolationException.class,
+                () -> inserirTransacao(usuarioId, acaoId, corretoraId, "chave-compartilhada"));
+
+        assertThrows(DataIntegrityViolationException.class, () -> inserirPosicao(Long.MAX_VALUE, acaoId));
+        assertThrows(DataIntegrityViolationException.class,
+                () -> inserirTransacao(Long.MAX_VALUE, acaoId, corretoraId, "usuario-inexistente"));
     }
 
     @Test
@@ -393,20 +440,36 @@ class PostgresTestcontainersIntegrationTest {
     private void inserirTransacao(Long acaoId, Long corretoraId, int quantidade,
                                   String valorUnitario, String idempotencyKey) {
         jdbc.update("""
-                INSERT INTO transacoes (acao_id, corretora_id, tipo_transacao, quantidade,
+                INSERT INTO transacoes (usuario_id, acao_id, corretora_id, tipo_transacao, quantidade,
                                         valor_unitario, data_hora_transacao, idempotency_key)
-                VALUES (?, ?, 'COMPRA', ?, ?, ?, ?)
-                """, acaoId, corretoraId, quantidade, new BigDecimal(valorUnitario),
+                VALUES (?, ?, ?, 'COMPRA', ?, ?, ?, ?)
+                """, usuarioId, acaoId, corretoraId, quantidade, new BigDecimal(valorUnitario),
                 OffsetDateTime.parse("2024-01-01T12:00:00Z"), idempotencyKey);
+    }
+
+    private void inserirTransacao(Long proprietarioId, Long acaoId, Long corretoraId,
+                                  String idempotencyKey) {
+        jdbc.update("""
+                INSERT INTO transacoes (usuario_id, acao_id, corretora_id, tipo_transacao, quantidade,
+                                        valor_unitario, data_hora_transacao, idempotency_key)
+                VALUES (?, ?, ?, 'COMPRA', 1, 10.0000, CURRENT_TIMESTAMP, ?)
+                """, proprietarioId, acaoId, corretoraId, idempotencyKey);
+    }
+
+    private void inserirPosicao(Long proprietarioId, Long acaoId) {
+        jdbc.update("""
+                INSERT INTO posicoes (usuario_id, acao_id, quantidade, preco_medio)
+                VALUES (?, ?, 1, 10.0000)
+                """, proprietarioId, acaoId);
     }
 
     private void inserirTransacaoFinanceira(Long acaoId, Long corretoraId, String tipo,
                                              String resultadoRealizado) {
         jdbc.update("""
-                INSERT INTO transacoes (acao_id, corretora_id, tipo_transacao, quantidade,
+                INSERT INTO transacoes (usuario_id, acao_id, corretora_id, tipo_transacao, quantidade,
                                         valor_unitario, resultado_realizado, data_hora_transacao)
-                VALUES (?, ?, ?, 1, 10.0000, ?, ?)
-                """, acaoId, corretoraId, tipo,
+                VALUES (?, ?, ?, ?, 1, 10.0000, ?, ?)
+                """, usuarioId, acaoId, corretoraId, tipo,
                 resultadoRealizado == null ? null : new BigDecimal(resultadoRealizado),
                 OffsetDateTime.parse("2024-01-01T12:00:00Z"));
     }

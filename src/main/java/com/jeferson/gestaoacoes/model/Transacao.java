@@ -28,6 +28,11 @@ public class Transacao {
     @JoinColumn(name = "corretora_id", nullable = false)
     private Corretora corretora;
 
+    // Nullable no banco apenas para preservar registros anteriores à autenticação.
+    @ManyToOne
+    @JoinColumn(name = "usuario_id")
+    private Usuario usuario;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "tipo_transacao", nullable = false, length = 10)
     private TipoTransacao tipoTransacao;
@@ -47,6 +52,6 @@ public class Transacao {
     @Column(name = "data_hora_transacao", nullable = false)
     private OffsetDateTime dataHoraTransacao;
 
-    @Column(name = "idempotency_key", length = 100, unique = true)
+    @Column(name = "idempotency_key", length = 100)
     private String idempotencyKey;
 }

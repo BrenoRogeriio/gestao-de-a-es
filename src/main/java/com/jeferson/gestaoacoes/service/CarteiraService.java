@@ -11,6 +11,7 @@ import com.jeferson.gestaoacoes.repository.CorretoraRepository;
 import com.jeferson.gestaoacoes.repository.PosicaoRepository;
 import com.jeferson.gestaoacoes.repository.ResultadoRealizadoPorMoeda;
 import com.jeferson.gestaoacoes.repository.TransacaoRepository;
+import com.jeferson.gestaoacoes.security.UsuarioAtualService;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,13 +40,16 @@ public class CarteiraService {
     private final TransacaoRepository transacaoRepository;
     private final AcaoRepository acaoRepository;
     private final CorretoraRepository corretoraRepository;
+    private final UsuarioAtualService usuarioAtualService;
 
     public CarteiraService(PosicaoRepository posicaoRepository, TransacaoRepository transacaoRepository,
-                           AcaoRepository acaoRepository, CorretoraRepository corretoraRepository) {
+                           AcaoRepository acaoRepository, CorretoraRepository corretoraRepository,
+                           UsuarioAtualService usuarioAtualService) {
         this.posicaoRepository = posicaoRepository;
         this.transacaoRepository = transacaoRepository;
         this.acaoRepository = acaoRepository;
         this.corretoraRepository = corretoraRepository;
+        this.usuarioAtualService = usuarioAtualService;
     }
 
     @Transactional
@@ -57,21 +61,22 @@ public class CarteiraService {
     public void registrarCompra(TransacaoRequestDTO dto, String idempotencyKey) {
         validarDadosTransacao(dto);
         String chaveNormalizada = validarChaveIdempotencia(idempotencyKey);
+        Usuario usuario = usuarioAtualService.obterReferencia();
 
         Acao acao = buscarAcaoComBloqueio(dto.acaoId());
         Corretora corretora = buscarCorretora(dto.corretoraId());
-        if (requisicaoJaProcessada(chaveNormalizada, TipoTransacao.COMPRA, dto, acao, corretora)) {
+        if (requisicaoJaProcessada(usuario.getId(), chaveNormalizada, TipoTransacao.COMPRA, dto, acao, corretora)) {
             return;
         }
 
         // Pega o preço exato que o usuário digitou na boleta (Front-end)
         BigDecimal precoCompra = dto.valorUnitario();
 
-        Posicao posicao = posicaoRepository.findByAcaoId(acao.getId()).orElse(new Posicao());
+        Posicao posicao = posicaoRepository.findByUsuarioIdAndAcaoId(usuario.getId(), acao.getId())
+                .orElseGet(() -> novaPosicao(usuario, acao));
 
         // REGRA DA RECEITA FEDERAL: Média Ponderada nas Compras
         if (posicao.getId() == null || posicao.getQuantidade() == 0) {
-            posicao.setAcao(acao);
             posicao.setQuantidade(dto.quantidade());
             posicao.setPrecoMedio(valorMonetario(precoCompra));
         } else {
@@ -93,7 +98,7 @@ public class CarteiraService {
             posicao.setPrecoMedio(novoPrecoMedio);
         }
 
-        salvarTransacao(acao, corretora, TipoTransacao.COMPRA, dto.quantidade(), precoCompra,
+        salvarTransacao(usuario, acao, corretora, TipoTransacao.COMPRA, dto.quantidade(), precoCompra,
                 dataHoraTransacao(dto.data()), chaveNormalizada);
         posicaoRepository.save(posicao);
     }
@@ -107,15 +112,16 @@ public class CarteiraService {
     public void registrarVenda(TransacaoRequestDTO dto, String idempotencyKey) {
         validarDadosTransacao(dto);
         String chaveNormalizada = validarChaveIdempotencia(idempotencyKey);
+        Usuario usuario = usuarioAtualService.obterReferencia();
 
         Acao acao = buscarAcaoComBloqueio(dto.acaoId());
         Corretora corretora = buscarCorretora(dto.corretoraId());
-        if (requisicaoJaProcessada(chaveNormalizada, TipoTransacao.VENDA, dto, acao, corretora)) {
+        if (requisicaoJaProcessada(usuario.getId(), chaveNormalizada, TipoTransacao.VENDA, dto, acao, corretora)) {
             return;
         }
         BigDecimal precoVenda = dto.valorUnitario();
 
-        Posicao posicao = posicaoRepository.findByAcaoId(acao.getId())
+        Posicao posicao = posicaoRepository.findByUsuarioIdAndAcaoId(usuario.getId(), acao.getId())
                 .orElseThrow(() -> new RegraNegocioException("Você não possui posição nesta ação para vender."));
 
         if (posicao.getQuantidade() < dto.quantidade()) {
@@ -131,7 +137,7 @@ public class CarteiraService {
         BigDecimal resultadoFinanceiroDaOperacao = valorMonetario(
                 lucroOuPrejuizoPorAcao.multiply(BigDecimal.valueOf(dto.quantidade())));
 
-        salvarTransacao(acao, corretora, TipoTransacao.VENDA, dto.quantidade(), precoVenda,
+        salvarTransacao(usuario, acao, corretora, TipoTransacao.VENDA, dto.quantidade(), precoVenda,
                 dataHoraTransacao(dto.data()), chaveNormalizada,
                 valorMonetario(precoMedioDeCusto), resultadoFinanceiroDaOperacao);
 
@@ -146,48 +152,21 @@ public class CarteiraService {
         posicaoRepository.save(posicao);
     }
 
+    @Transactional(readOnly = true)
     public List<PosicaoResponseDTO> listarPosicoes() {
-        return posicaoRepository.findAll().stream()
-                .filter(p -> p.getQuantidade() > 0)
-                .map(p -> {
-                    BigDecimal cotacaoAtual = p.getAcao().getCotacaoAtual();
-                    BigDecimal precoMedio = p.getPrecoMedio();
-
-                    BigDecimal valorInvestido = valorMonetario(
-                            precoMedio.multiply(BigDecimal.valueOf(p.getQuantidade())));
-                    BigDecimal valorAtual = cotacaoAtual == null ? null : valorMonetario(
-                            cotacaoAtual.multiply(BigDecimal.valueOf(p.getQuantidade())));
-                    BigDecimal resultadoNaoRealizado = valorAtual == null ? null
-                            : valorMonetario(valorAtual.subtract(valorInvestido));
-                    BigDecimal rentabilidade = valorAtual == null ? null
-                            : calcularRentabilidade(resultadoNaoRealizado, valorInvestido);
-
-                    return new PosicaoResponseDTO(
-                            p.getAcao().getId(),
-                            p.getAcao().getTicker(),
-                            p.getAcao().getNomeEmpresa(),
-                            p.getAcao().getMercado(),
-                            p.getAcao().getMoeda(),
-                            p.getQuantidade(),
-                            precoMedio,
-                            cotacaoAtual,
-                            valorInvestido,
-                            valorAtual,
-                            resultadoNaoRealizado,
-                            rentabilidade,
-                            valorAtual
-                    );
-                }).toList();
+        return listarPosicoesDoUsuario(usuarioAtualService.obterId());
     }
 
+    @Transactional(readOnly = true)
     public List<ResumoCarteiraResponseDTO> resumirCarteiraPorMoeda() {
+        Long usuarioId = usuarioAtualService.obterId();
         Map<Moeda, List<PosicaoResponseDTO>> posicoesPorMoeda = new EnumMap<>(Moeda.class);
-        listarPosicoes().forEach(posicao -> posicoesPorMoeda
+        listarPosicoesDoUsuario(usuarioId).forEach(posicao -> posicoesPorMoeda
                 .computeIfAbsent(posicao.moeda(), moeda -> new java.util.ArrayList<>())
                 .add(posicao));
 
         Map<Moeda, BigDecimal> resultadoRealizadoPorMoeda = new EnumMap<>(Moeda.class);
-        transacaoRepository.somarResultadoRealizadoPorMoeda().forEach(resultado ->
+        transacaoRepository.somarResultadoRealizadoPorMoeda(usuarioId).forEach(resultado ->
                 resultadoRealizadoPorMoeda.put(resultado.moeda(), valorMonetario(resultado.valor())));
 
         EnumSet<Moeda> moedas = EnumSet.noneOf(Moeda.class);
@@ -231,18 +210,19 @@ public class CarteiraService {
         );
     }
 
-    private void salvarTransacao(Acao acao, Corretora corretora, TipoTransacao tipo, Integer quantidade,
+    private void salvarTransacao(Usuario usuario, Acao acao, Corretora corretora, TipoTransacao tipo, Integer quantidade,
                                  BigDecimal valorUnitario, OffsetDateTime dataHoraTransacao,
                                  String idempotencyKey) {
-        salvarTransacao(acao, corretora, tipo, quantidade, valorUnitario, dataHoraTransacao,
+        salvarTransacao(usuario, acao, corretora, tipo, quantidade, valorUnitario, dataHoraTransacao,
                 idempotencyKey, null, null);
     }
 
-    private void salvarTransacao(Acao acao, Corretora corretora, TipoTransacao tipo, Integer quantidade,
+    private void salvarTransacao(Usuario usuario, Acao acao, Corretora corretora, TipoTransacao tipo, Integer quantidade,
                                  BigDecimal valorUnitario, OffsetDateTime dataHoraTransacao,
                                  String idempotencyKey, BigDecimal precoMedioOperacao,
                                  BigDecimal resultadoRealizado) {
         Transacao transacao = new Transacao();
+        transacao.setUsuario(usuario);
         transacao.setAcao(acao);
         transacao.setCorretora(corretora);
         transacao.setTipoTransacao(tipo);
@@ -312,13 +292,13 @@ public class CarteiraService {
         return chaveNormalizada;
     }
 
-    private boolean requisicaoJaProcessada(String idempotencyKey, TipoTransacao tipo,
+    private boolean requisicaoJaProcessada(Long usuarioId, String idempotencyKey, TipoTransacao tipo,
                                             TransacaoRequestDTO dto, Acao acao, Corretora corretora) {
         if (idempotencyKey == null) {
             return false;
         }
 
-        return transacaoRepository.findByIdempotencyKey(idempotencyKey)
+        return transacaoRepository.findByUsuarioIdAndIdempotencyKey(usuarioId, idempotencyKey)
                 .map(transacao -> {
                     boolean mesmaOperacao = transacao.getTipoTransacao() == tipo
                             && transacao.getAcao().getId().equals(acao.getId())
@@ -366,9 +346,10 @@ public class CarteiraService {
     private Corretora buscarCorretora(Long id) {
         return corretoraRepository.findById(id).orElseThrow(() -> new RegraNegocioException("Corretora não encontrada."));
     }
-    // Importe java.util.Comparator se pedir!
+    @Transactional(readOnly = true)
     public List<HistoricoResponseDTO> listarHistorico() {
-        return transacaoRepository.findAll().stream()
+        Long usuarioId = usuarioAtualService.obterId();
+        return transacaoRepository.findAllByUsuarioIdOrderByDataHoraTransacaoDesc(usuarioId).stream()
                 .sorted(java.util.Comparator.comparing(Transacao::getDataHoraTransacao).reversed())
                 .map(t -> new HistoricoResponseDTO(
                         t.getAcao().getId(),
@@ -386,5 +367,37 @@ public class CarteiraService {
                         t.getDataHoraTransacao(),
                         dataOperacao(t)
                 )).toList();
+    }
+
+    private Posicao novaPosicao(Usuario usuario, Acao acao) {
+        Posicao posicao = new Posicao();
+        posicao.setUsuario(usuario);
+        posicao.setAcao(acao);
+        return posicao;
+    }
+
+    private List<PosicaoResponseDTO> listarPosicoesDoUsuario(Long usuarioId) {
+        return posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(usuarioId, 0).stream()
+                .filter(posicao -> posicao.getQuantidade() > 0)
+                .map(this::mapearPosicao)
+                .toList();
+    }
+
+    private PosicaoResponseDTO mapearPosicao(Posicao p) {
+        BigDecimal cotacaoAtual = p.getAcao().getCotacaoAtual();
+        BigDecimal precoMedio = p.getPrecoMedio();
+        BigDecimal valorInvestido = valorMonetario(
+                precoMedio.multiply(BigDecimal.valueOf(p.getQuantidade())));
+        BigDecimal valorAtual = cotacaoAtual == null ? null : valorMonetario(
+                cotacaoAtual.multiply(BigDecimal.valueOf(p.getQuantidade())));
+        BigDecimal resultadoNaoRealizado = valorAtual == null ? null
+                : valorMonetario(valorAtual.subtract(valorInvestido));
+        BigDecimal rentabilidade = valorAtual == null ? null
+                : calcularRentabilidade(resultadoNaoRealizado, valorInvestido);
+
+        return new PosicaoResponseDTO(
+                p.getAcao().getId(), p.getAcao().getTicker(), p.getAcao().getNomeEmpresa(),
+                p.getAcao().getMercado(), p.getAcao().getMoeda(), p.getQuantidade(), precoMedio,
+                cotacaoAtual, valorInvestido, valorAtual, resultadoNaoRealizado, rentabilidade, valorAtual);
     }
 }

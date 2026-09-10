@@ -8,11 +8,13 @@ import com.jeferson.gestaoacoes.model.Moeda;
 import com.jeferson.gestaoacoes.model.Posicao;
 import com.jeferson.gestaoacoes.model.TipoTransacao;
 import com.jeferson.gestaoacoes.model.Transacao;
+import com.jeferson.gestaoacoes.model.Usuario;
 import com.jeferson.gestaoacoes.repository.AcaoRepository;
 import com.jeferson.gestaoacoes.repository.CorretoraRepository;
 import com.jeferson.gestaoacoes.repository.PosicaoRepository;
 import com.jeferson.gestaoacoes.repository.ResultadoRealizadoPorMoeda;
 import com.jeferson.gestaoacoes.repository.TransacaoRepository;
+import com.jeferson.gestaoacoes.security.UsuarioAtualService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,10 +34,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CarteiraFinanceiroServiceTest {
+
+    private static final long USUARIO_ID = 10L;
 
     @Mock
     private PosicaoRepository posicaoRepository;
@@ -45,6 +50,8 @@ class CarteiraFinanceiroServiceTest {
     private AcaoRepository acaoRepository;
     @Mock
     private CorretoraRepository corretoraRepository;
+    @Mock
+    private UsuarioAtualService usuarioAtualService;
 
     @InjectMocks
     private CarteiraService service;
@@ -54,6 +61,10 @@ class CarteiraFinanceiroServiceTest {
 
     @BeforeEach
     void prepararEntidades() {
+        Usuario usuario = new Usuario();
+        usuario.setId(USUARIO_ID);
+        lenient().when(usuarioAtualService.obterReferencia()).thenReturn(usuario);
+        lenient().when(usuarioAtualService.obterId()).thenReturn(USUARIO_ID);
         acao = acao(1L, "PETR4", Mercado.BRASIL, Moeda.BRL, "120.0000");
         corretora = new Corretora();
         corretora.setId(2L);
@@ -64,7 +75,7 @@ class CarteiraFinanceiroServiceTest {
     void deveCalcularMediaPonderadaNaSegundaCompra() {
         prepararReferencias();
         Posicao posicao = posicao(acao, 10, "100.0000");
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.of(posicao));
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.of(posicao));
 
         service.registrarCompra(dto(5, "120.0000"));
 
@@ -89,7 +100,7 @@ class CarteiraFinanceiroServiceTest {
     void devePreservarQuatroCasasComQuantidadeGrande() {
         prepararReferencias();
         Posicao posicao = posicao(acao, 1_000_000_000, "10.1234");
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.of(posicao));
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.of(posicao));
 
         service.registrarCompra(dto(1_000_000_000, "10.1235"));
 
@@ -102,7 +113,7 @@ class CarteiraFinanceiroServiceTest {
     void deveManterPrecoMedioERegistrarLucroNaVendaParcial() {
         prepararReferencias();
         Posicao posicao = posicao(acao, 15, "106.6667");
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.of(posicao));
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.of(posicao));
 
         service.registrarVenda(dto(4, "130.0000"));
 
@@ -118,7 +129,7 @@ class CarteiraFinanceiroServiceTest {
     void deveRegistrarPrejuizoRealizado() {
         prepararReferencias();
         Posicao posicao = posicao(acao, 10, "100.0000");
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.of(posicao));
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.of(posicao));
 
         service.registrarVenda(dto(3, "80.0000"));
 
@@ -131,7 +142,7 @@ class CarteiraFinanceiroServiceTest {
     void deveZerarQuantidadeEPrecoMedioNaVendaTotal() {
         prepararReferencias();
         Posicao posicao = posicao(acao, 10, "100.0000");
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.of(posicao));
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.of(posicao));
 
         service.registrarVenda(dto(10, "120.0000"));
 
@@ -141,7 +152,7 @@ class CarteiraFinanceiroServiceTest {
 
     @Test
     void deveCalcularResultadoNaoRealizadoPositivoERentabilidade() {
-        when(posicaoRepository.findAll()).thenReturn(List.of(posicao(acao, 15, "106.6667")));
+        when(posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(USUARIO_ID, 0)).thenReturn(List.of(posicao(acao, 15, "106.6667")));
 
         var resposta = service.listarPosicoes().getFirst();
 
@@ -155,7 +166,7 @@ class CarteiraFinanceiroServiceTest {
     @Test
     void deveCalcularResultadoNaoRealizadoNegativo() {
         acao.setCotacaoAtual(new BigDecimal("80.0000"));
-        when(posicaoRepository.findAll()).thenReturn(List.of(posicao(acao, 10, "100.0000")));
+        when(posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(USUARIO_ID, 0)).thenReturn(List.of(posicao(acao, 10, "100.0000")));
 
         var resposta = service.listarPosicoes().getFirst();
 
@@ -168,7 +179,7 @@ class CarteiraFinanceiroServiceTest {
         Posicao zerada = posicao(acao, 0, "0.0000");
         Acao semCotacao = acao(2L, "VALE3", Mercado.BRASIL, Moeda.BRL, null);
         Posicao abertaSemCotacao = posicao(semCotacao, 2, "50.0000");
-        when(posicaoRepository.findAll()).thenReturn(List.of(zerada, abertaSemCotacao));
+        when(posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(USUARIO_ID, 0)).thenReturn(List.of(zerada, abertaSemCotacao));
 
         var resposta = service.listarPosicoes();
 
@@ -183,10 +194,10 @@ class CarteiraFinanceiroServiceTest {
     void deveConsolidarBrlEUsdSeparadamente() {
         Acao acaoBrl = acao(1L, "PETR4", Mercado.BRASIL, Moeda.BRL, "120.0000");
         Acao acaoUsd = acao(2L, "AAPL", Mercado.ESTADOS_UNIDOS, Moeda.USD, "180.0000");
-        when(posicaoRepository.findAll()).thenReturn(List.of(
+        when(posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(USUARIO_ID, 0)).thenReturn(List.of(
                 posicao(acaoBrl, 10, "100.0000"),
                 posicao(acaoUsd, 2, "150.0000")));
-        when(transacaoRepository.somarResultadoRealizadoPorMoeda()).thenReturn(List.of(
+        when(transacaoRepository.somarResultadoRealizadoPorMoeda(USUARIO_ID)).thenReturn(List.of(
                 resultadoRealizado(Moeda.BRL, "50.0000"),
                 resultadoRealizado(Moeda.USD, "-10.0000")));
 
@@ -209,8 +220,8 @@ class CarteiraFinanceiroServiceTest {
 
     @Test
     void deveManterResultadoRealizadoZeroQuandoNaoHaVenda() {
-        when(posicaoRepository.findAll()).thenReturn(List.of(posicao(acao, 10, "100.0000")));
-        when(transacaoRepository.somarResultadoRealizadoPorMoeda()).thenReturn(List.of());
+        when(posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(USUARIO_ID, 0)).thenReturn(List.of(posicao(acao, 10, "100.0000")));
+        when(transacaoRepository.somarResultadoRealizadoPorMoeda(USUARIO_ID)).thenReturn(List.of());
 
         var resumo = service.resumirCarteiraPorMoeda().getFirst();
 
@@ -220,8 +231,8 @@ class CarteiraFinanceiroServiceTest {
 
     @Test
     void deveSomarLucroRealizadoAoNaoRealizadoSemAlterarRentabilidadeExistente() {
-        when(posicaoRepository.findAll()).thenReturn(List.of(posicao(acao, 10, "100.0000")));
-        when(transacaoRepository.somarResultadoRealizadoPorMoeda()).thenReturn(
+        when(posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(USUARIO_ID, 0)).thenReturn(List.of(posicao(acao, 10, "100.0000")));
+        when(transacaoRepository.somarResultadoRealizadoPorMoeda(USUARIO_ID)).thenReturn(
                 List.of(resultadoRealizado(Moeda.BRL, "350.0000")));
 
         var resumo = service.resumirCarteiraPorMoeda().getFirst();
@@ -234,8 +245,8 @@ class CarteiraFinanceiroServiceTest {
 
     @Test
     void deveSomarPrejuizoRealizadoAoResultadoTotal() {
-        when(posicaoRepository.findAll()).thenReturn(List.of(posicao(acao, 10, "100.0000")));
-        when(transacaoRepository.somarResultadoRealizadoPorMoeda()).thenReturn(
+        when(posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(USUARIO_ID, 0)).thenReturn(List.of(posicao(acao, 10, "100.0000")));
+        when(transacaoRepository.somarResultadoRealizadoPorMoeda(USUARIO_ID)).thenReturn(
                 List.of(resultadoRealizado(Moeda.BRL, "-300.0000")));
 
         var resumo = service.resumirCarteiraPorMoeda().getFirst();
@@ -247,8 +258,8 @@ class CarteiraFinanceiroServiceTest {
 
     @Test
     void deveExibirResultadoRealizadoMesmoSemPosicaoAberta() {
-        when(posicaoRepository.findAll()).thenReturn(List.of());
-        when(transacaoRepository.somarResultadoRealizadoPorMoeda()).thenReturn(
+        when(posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(USUARIO_ID, 0)).thenReturn(List.of());
+        when(transacaoRepository.somarResultadoRealizadoPorMoeda(USUARIO_ID)).thenReturn(
                 List.of(resultadoRealizado(Moeda.BRL, "125.0000")));
 
         var resumo = service.resumirCarteiraPorMoeda().getFirst();
@@ -266,7 +277,7 @@ class CarteiraFinanceiroServiceTest {
     void deveExporResultadoSomenteParaVendaNoHistorico() {
         Transacao compra = transacao(TipoTransacao.COMPRA, "100.0000", null, null);
         Transacao venda = transacao(TipoTransacao.VENDA, "130.0000", "106.6667", "93.3332");
-        when(transacaoRepository.findAll()).thenReturn(List.of(compra, venda));
+        when(transacaoRepository.findAllByUsuarioIdOrderByDataHoraTransacaoDesc(USUARIO_ID)).thenReturn(List.of(compra, venda));
 
         var historico = service.listarHistorico();
         var vendaDto = historico.getFirst();
@@ -287,7 +298,7 @@ class CarteiraFinanceiroServiceTest {
 
     private AtomicReference<Posicao> simularPersistenciaDaPosicao() {
         AtomicReference<Posicao> estado = new AtomicReference<>();
-        when(posicaoRepository.findByAcaoId(acao.getId()))
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId()))
                 .thenAnswer(invocation -> Optional.ofNullable(estado.get()));
         when(posicaoRepository.save(any(Posicao.class))).thenAnswer(invocation -> {
             Posicao posicao = invocation.getArgument(0);

@@ -9,10 +9,12 @@ import com.jeferson.gestaoacoes.model.Moeda;
 import com.jeferson.gestaoacoes.model.Posicao;
 import com.jeferson.gestaoacoes.model.TipoTransacao;
 import com.jeferson.gestaoacoes.model.Transacao;
+import com.jeferson.gestaoacoes.model.Usuario;
 import com.jeferson.gestaoacoes.repository.AcaoRepository;
 import com.jeferson.gestaoacoes.repository.CorretoraRepository;
 import com.jeferson.gestaoacoes.repository.PosicaoRepository;
 import com.jeferson.gestaoacoes.repository.TransacaoRepository;
+import com.jeferson.gestaoacoes.security.UsuarioAtualService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,13 +34,17 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class CarteiraServiceTest {
+
+    private static final long USUARIO_ID = 10L;
 
     @Mock
     private PosicaoRepository posicaoRepository;
@@ -48,6 +54,8 @@ class CarteiraServiceTest {
     private AcaoRepository acaoRepository;
     @Mock
     private CorretoraRepository corretoraRepository;
+    @Mock
+    private UsuarioAtualService usuarioAtualService;
 
     @InjectMocks
     private CarteiraService service;
@@ -57,6 +65,10 @@ class CarteiraServiceTest {
 
     @BeforeEach
     void prepararEntidades() {
+        Usuario usuario = new Usuario();
+        usuario.setId(USUARIO_ID);
+        lenient().when(usuarioAtualService.obterReferencia()).thenReturn(usuario);
+        lenient().when(usuarioAtualService.obterId()).thenReturn(USUARIO_ID);
         acao = new Acao();
         acao.setId(1L);
         corretora = new Corretora();
@@ -128,7 +140,7 @@ class CarteiraServiceTest {
     void deveRejeitarOverflowDaQuantidadeTotalNaCompra() {
         prepararReferencias();
         Posicao posicao = posicao(Integer.MAX_VALUE, "10.0000");
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.of(posicao));
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.of(posicao));
 
         RegraNegocioException exception = assertThrows(RegraNegocioException.class,
                 () -> service.registrarCompra(dto(1, "20.0000")));
@@ -141,7 +153,7 @@ class CarteiraServiceTest {
     @Test
     void devePreservarRegraQueImpedeVendaAcimaDaPosicao() {
         prepararReferencias();
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.of(posicao(5, "10.0000")));
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.of(posicao(5, "10.0000")));
 
         RegraNegocioException exception = assertThrows(RegraNegocioException.class,
                 () -> service.registrarVenda(dto(6, "12.0000")));
@@ -154,7 +166,7 @@ class CarteiraServiceTest {
     @Test
     void deveRegistrarCompraValida() {
         prepararReferencias();
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.empty());
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.empty());
 
         service.registrarCompra(dto(3, "10.1234"));
 
@@ -171,7 +183,7 @@ class CarteiraServiceTest {
     void deveRegistrarVendaValida() {
         prepararReferencias();
         Posicao posicao = posicao(5, "10.0000");
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.of(posicao));
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.of(posicao));
 
         service.registrarVenda(dto(2, "12.3456"));
 
@@ -186,7 +198,7 @@ class CarteiraServiceTest {
     @Test
     void deveSalvarDataInformadaPeloCliente() {
         prepararReferencias();
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.empty());
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.empty());
 
         service.registrarCompra(dto(3, "10.1234", LocalDate.of(2026, 9, 5)));
 
@@ -201,7 +213,7 @@ class CarteiraServiceTest {
     @Test
     void deveUsarDataHoraAtualQuandoDataNaoForInformada() {
         prepararReferencias();
-        when(posicaoRepository.findByAcaoId(acao.getId())).thenReturn(Optional.empty());
+        when(posicaoRepository.findByUsuarioIdAndAcaoId(USUARIO_ID, acao.getId())).thenReturn(Optional.empty());
         Instant antes = Instant.now();
 
         service.registrarCompra(dto(3, "10.1234"));
@@ -220,7 +232,7 @@ class CarteiraServiceTest {
         Acao acaoUsd = acao(2L, "AAPL", Mercado.ESTADOS_UNIDOS, Moeda.USD, "200.0000");
         Posicao posicaoBrl = posicao(acaoBrl, 2, "30.0000");
         Posicao posicaoUsd = posicao(acaoUsd, 3, "150.0000");
-        when(posicaoRepository.findAll()).thenReturn(List.of(posicaoBrl, posicaoUsd));
+        when(posicaoRepository.findAllByUsuarioIdAndQuantidadeGreaterThan(USUARIO_ID, 0)).thenReturn(List.of(posicaoBrl, posicaoUsd));
 
         var resposta = service.listarPosicoes();
 
@@ -242,7 +254,7 @@ class CarteiraServiceTest {
         transacao.setQuantidade(2);
         transacao.setValorUnitario(new BigDecimal("150.0000"));
         transacao.setDataHoraTransacao(OffsetDateTime.of(2026, 9, 5, 0, 0, 0, 0, ZoneOffset.ofHours(-3)));
-        when(transacaoRepository.findAll()).thenReturn(List.of(transacao));
+        when(transacaoRepository.findAllByUsuarioIdOrderByDataHoraTransacaoDesc(USUARIO_ID)).thenReturn(List.of(transacao));
 
         var resposta = service.listarHistorico().getFirst();
 
@@ -255,11 +267,11 @@ class CarteiraServiceTest {
     void deveIgnorarRepeticaoDaMesmaOperacaoComMesmaChave() {
         prepararReferencias();
         Transacao existente = transacaoExistente(TipoTransacao.COMPRA, 3, "10.1234", "operacao-1");
-        when(transacaoRepository.findByIdempotencyKey("operacao-1")).thenReturn(Optional.of(existente));
+        when(transacaoRepository.findByUsuarioIdAndIdempotencyKey(USUARIO_ID, "operacao-1")).thenReturn(Optional.of(existente));
 
         service.registrarCompra(dto(3, "10.1234"), " operacao-1 ");
 
-        verify(posicaoRepository, never()).findByAcaoId(any());
+        verify(posicaoRepository, never()).findByUsuarioIdAndAcaoId(eq(USUARIO_ID), any());
         verify(posicaoRepository, never()).save(any());
         verify(transacaoRepository, never()).saveAndFlush(any());
     }
@@ -271,11 +283,11 @@ class CarteiraServiceTest {
         existente.setDataHoraTransacao(
                 OffsetDateTime.of(2026, 9, 5, 0, 0, 0, 0, ZoneOffset.ofHours(-3))
         );
-        when(transacaoRepository.findByIdempotencyKey("operacao-1")).thenReturn(Optional.of(existente));
+        when(transacaoRepository.findByUsuarioIdAndIdempotencyKey(USUARIO_ID, "operacao-1")).thenReturn(Optional.of(existente));
 
         service.registrarCompra(dto(3, "10.1234", LocalDate.of(2026, 9, 5)), "operacao-1");
 
-        verify(posicaoRepository, never()).findByAcaoId(any());
+        verify(posicaoRepository, never()).findByUsuarioIdAndAcaoId(eq(USUARIO_ID), any());
         verify(posicaoRepository, never()).save(any());
         verify(transacaoRepository, never()).saveAndFlush(any());
     }
@@ -284,13 +296,13 @@ class CarteiraServiceTest {
     void deveRejeitarReutilizacaoDaChaveEmOperacaoDiferente() {
         prepararReferencias();
         Transacao existente = transacaoExistente(TipoTransacao.COMPRA, 3, "10.1234", "operacao-1");
-        when(transacaoRepository.findByIdempotencyKey("operacao-1")).thenReturn(Optional.of(existente));
+        when(transacaoRepository.findByUsuarioIdAndIdempotencyKey(USUARIO_ID, "operacao-1")).thenReturn(Optional.of(existente));
 
         RegraNegocioException exception = assertThrows(RegraNegocioException.class,
                 () -> service.registrarVenda(dto(2, "12.0000"), "operacao-1"));
 
         assertEquals("A chave de idempotência já foi utilizada em outra operação.", exception.getMessage());
-        verify(posicaoRepository, never()).findByAcaoId(any());
+        verify(posicaoRepository, never()).findByUsuarioIdAndAcaoId(eq(USUARIO_ID), any());
         verify(transacaoRepository, never()).saveAndFlush(any());
     }
 
@@ -301,13 +313,13 @@ class CarteiraServiceTest {
         existente.setDataHoraTransacao(
                 OffsetDateTime.of(2026, 9, 5, 0, 0, 0, 0, ZoneOffset.ofHours(-3))
         );
-        when(transacaoRepository.findByIdempotencyKey("operacao-1")).thenReturn(Optional.of(existente));
+        when(transacaoRepository.findByUsuarioIdAndIdempotencyKey(USUARIO_ID, "operacao-1")).thenReturn(Optional.of(existente));
 
         RegraNegocioException exception = assertThrows(RegraNegocioException.class,
                 () -> service.registrarCompra(dto(3, "10.1234", LocalDate.of(2026, 9, 6)), "operacao-1"));
 
         assertEquals("A chave de idempotência já foi utilizada em outra operação.", exception.getMessage());
-        verify(posicaoRepository, never()).findByAcaoId(any());
+        verify(posicaoRepository, never()).findByUsuarioIdAndAcaoId(eq(USUARIO_ID), any());
         verify(transacaoRepository, never()).saveAndFlush(any());
     }
 
