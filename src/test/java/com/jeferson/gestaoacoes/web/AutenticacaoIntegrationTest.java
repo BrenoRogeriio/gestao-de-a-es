@@ -178,6 +178,14 @@ class AutenticacaoIntegrationTest {
     }
 
     @Test
+    void rotaNaoListadaDeveSerNegadaPorPadrao() throws Exception {
+        mockMvc.perform(get("/rota-nao-publica"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(401));
+    }
+
+    @Test
     void corsDeveContinuarAceitandoAuthorizationEIdempotencyKey() throws Exception {
         mockMvc.perform(options("/carteira/comprar")
                         .header(HttpHeaders.ORIGIN, "http://localhost:5173")

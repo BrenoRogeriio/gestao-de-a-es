@@ -44,7 +44,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/actuator/info").authenticated()
                         .requestMatchers("/actuator/**").denyAll()
                         .requestMatchers("/acoes/**", "/corretoras/**", "/carteira/**", "/auth/me").authenticated()
-                        .anyRequest().permitAll())
+                        .anyRequest().denyAll())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

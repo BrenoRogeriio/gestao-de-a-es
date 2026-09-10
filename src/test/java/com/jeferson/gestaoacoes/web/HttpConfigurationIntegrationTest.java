@@ -18,6 +18,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.FilterType;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.PropertiesLoaderUtils;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -68,6 +69,9 @@ class HttpConfigurationIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private Environment environment;
 
     @MockBean
     private CarteiraService carteiraService;
@@ -223,5 +227,13 @@ class HttpConfigurationIntegrationTest {
         assertEquals("${SWAGGER_ENABLED:false}", prod.getProperty("springdoc.api-docs.enabled"));
         assertEquals("${SWAGGER_ENABLED:false}", prod.getProperty("springdoc.swagger-ui.enabled"));
         assertEquals("${CORS_ALLOWED_ORIGINS:}", prod.getProperty("app.http.cors.allowed-origins"));
+    }
+
+    @Test
+    void deveConfigurarTimeoutsDosClientesExternos() {
+        assertEquals("3000", environment.getProperty(
+                "spring.cloud.openfeign.client.config.default.connectTimeout"));
+        assertEquals("5000", environment.getProperty(
+                "spring.cloud.openfeign.client.config.default.readTimeout"));
     }
 }

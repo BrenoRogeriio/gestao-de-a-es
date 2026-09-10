@@ -29,6 +29,9 @@ O frontend React/Vite consome a API HTTP/JSON Spring Boot. O backend organiza o 
 - JUnit 5, Mockito e Testcontainers;
 - Docker e Docker Compose.
 
+As integrações externas usam timeouts explícitos de conexão e leitura (3 s e 5 s por padrão),
+configuráveis por `EXTERNAL_API_CONNECT_TIMEOUT_MS` e `EXTERNAL_API_READ_TIMEOUT_MS`.
+
 Detalhes estão em [Arquitetura](docs/ARQUITETURA.md) e [API](docs/API.md).
 
 ## Requisitos

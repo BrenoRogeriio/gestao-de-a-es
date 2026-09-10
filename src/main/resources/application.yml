@@ -2,6 +2,14 @@ spring:
   application:
     name: gestao-acoes
 
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: ${EXTERNAL_API_CONNECT_TIMEOUT_MS:3000}
+            readTimeout: ${EXTERNAL_API_READ_TIMEOUT_MS:5000}
+
   # ==========================================
   # CONFIGURAÇÕES DO LIQUIBASE (AULA 11)
   # ==========================================

@@ -108,7 +108,7 @@ O Liquibase é a fonte do schema. As migrations são aditivas e o Hibernate apen
 - Brapi: dados e cotações de ativos brasileiros;
 - Twelve Data: dados e cotações de ativos norte-americanos.
 
-Tokens externos são recebidos por variáveis de ambiente. Exceções dos provedores são traduzidas para Problem Details sem devolver credenciais ou detalhes internos.
+Tokens externos são recebidos por variáveis de ambiente. Os clientes usam timeouts explícitos de conexão e leitura, configuráveis por ambiente. Exceções dos provedores são traduzidas para Problem Details sem devolver credenciais ou detalhes internos.
 
 ## Observabilidade e segurança HTTP
 
