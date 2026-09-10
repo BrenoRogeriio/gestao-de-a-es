@@ -10,5 +10,6 @@
     <include file="changes/004-validar-valores-transacoes-posicoes.xml" relativeToChangelogFile="true"/>
     <include file="changes/005-adicionar-idempotencia-transacoes.xml" relativeToChangelogFile="true"/>
     <include file="changes/006-adicionar-resultados-financeiros-transacoes.xml" relativeToChangelogFile="true"/>
+    <include file="changes/007-adicionar-usuarios-autenticacao.xml" relativeToChangelogFile="true"/>
 
 </databaseChangeLog>

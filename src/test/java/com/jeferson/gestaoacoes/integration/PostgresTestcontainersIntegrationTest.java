@@ -75,7 +75,7 @@ class PostgresTestcontainersIntegrationTest {
 
     @BeforeEach
     void limparBancoTemporario() {
-        jdbc.execute("TRUNCATE TABLE transacoes, posicoes, acoes, corretoras RESTART IDENTITY CASCADE");
+        jdbc.execute("TRUNCATE TABLE transacoes, posicoes, acoes, corretoras, usuarios RESTART IDENTITY CASCADE");
     }
 
     @Test
@@ -83,18 +83,20 @@ class PostgresTestcontainersIntegrationTest {
         assertTrue(jdbc.queryForObject("SELECT version()", String.class).startsWith("PostgreSQL 17"));
         assertEquals(POSTGRES.getDatabaseName(),
                 jdbc.queryForObject("SELECT current_database()", String.class));
-        assertEquals(8, contar("SELECT COUNT(*) FROM databasechangelog"));
-        assertEquals(5, contar("""
+        assertEquals(9, contar("SELECT COUNT(*) FROM databasechangelog"));
+        assertEquals(6, contar("""
                 SELECT COUNT(*)
                   FROM pg_constraint
                  WHERE conname IN ('uk_acao_ticker_mercado',
                                    'ck_posicoes_quantidade_nao_negativa',
                                    'ck_transacoes_quantidade_positiva',
                                    'ck_transacoes_valor_unitario_positivo',
-                                   'uk_transacoes_idempotency_key')
+                                   'uk_transacoes_idempotency_key',
+                                   'uk_usuarios_email')
                 """));
         assertEquals("timestamp with time zone", tipoColuna("acoes", "data_hora_cotacao"));
         assertEquals("timestamp with time zone", tipoColuna("transacoes", "data_hora_transacao"));
+        assertEquals("timestamp with time zone", tipoColuna("usuarios", "data_hora_cadastro"));
         assertEquals("integer", tipoColuna("posicoes", "quantidade"));
         assertEquals("integer", tipoColuna("transacoes", "quantidade"));
         assertTipoNumerico("posicoes", "preco_medio", 19, 4);
@@ -103,6 +105,15 @@ class PostgresTestcontainersIntegrationTest {
         assertTipoNumerico("transacoes", "resultado_realizado", 29, 4);
         assertEquals(20, tamanhoMaximo("acoes", "ticker"));
         assertEquals(100, tamanhoMaximo("transacoes", "idempotency_key"));
+        assertEquals(254, tamanhoMaximo("usuarios", "email"));
+    }
+
+    @Test
+    void deveImpedirEmailDuplicadoDiretamenteNoBanco() {
+        inserirUsuario("usuario@example.com");
+
+        assertThrows(DataIntegrityViolationException.class,
+                () -> inserirUsuario("usuario@example.com"));
     }
 
     @Test
@@ -369,6 +380,14 @@ class PostgresTestcontainersIntegrationTest {
                         'Bairro do teste', 'Sao Paulo', 'SP', 'ATIVA', 'REGULAR', CURRENT_TIMESTAMP)
                 """);
         return jdbc.queryForObject("SELECT id FROM corretoras", Long.class);
+    }
+
+    private void inserirUsuario(String email) {
+        jdbc.update("""
+                INSERT INTO usuarios (nome, email, senha_hash, perfil, ativo, data_hora_cadastro)
+                VALUES ('Usuario do teste', ?, '$2a$10$hashapenasparatestedebancodedados0000000000000000000',
+                        'USER', TRUE, CURRENT_TIMESTAMP)
+                """, email);
     }
 
     private void inserirTransacao(Long acaoId, Long corretoraId, int quantidade,

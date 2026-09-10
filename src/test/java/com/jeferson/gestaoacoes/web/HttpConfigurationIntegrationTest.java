@@ -13,11 +13,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.support.PropertiesLoaderUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
+import com.jeferson.gestaoacoes.security.JwtAuthenticationFilter;
 
 import java.util.List;
 import java.util.Properties;
@@ -33,6 +37,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -40,9 +45,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @WebMvcTest(
         controllers = CarteiraController.class,
-        properties = "app.http.cors.allowed-origins=http://localhost:5173"
+        properties = "app.http.cors.allowed-origins=http://localhost:5173",
+        excludeFilters = @ComponentScan.Filter(
+                type = FilterType.ASSIGNABLE_TYPE,
+                classes = JwtAuthenticationFilter.class)
 )
 @Import({HttpConfiguration.class, SecurityHeadersFilter.class, GlobalExceptionHandler.class})
+@WithMockUser
 class HttpConfigurationIntegrationTest {
 
     private static final String ORIGEM_DEV = "http://localhost:5173";
@@ -84,7 +93,9 @@ class HttpConfigurationIntegrationTest {
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGEM_DEV))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, containsString("POST")))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
-                        containsString("Idempotency-Key")));
+                        containsString("Idempotency-Key")))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                        containsString("Authorization")));
     }
 
     @Test
@@ -99,6 +110,7 @@ class HttpConfigurationIntegrationTest {
     @Test
     void deveAceitarIdempotencyKey() throws Exception {
         mockMvc.perform(post("/carteira/comprar")
+                        .with(csrf())
                         .header(HttpHeaders.ORIGIN, ORIGEM_DEV)
                         .header("Idempotency-Key", "operacao-http-1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -111,6 +123,7 @@ class HttpConfigurationIntegrationTest {
     @Test
     void deveRetornarErroDeValidacaoConsistente() throws Exception {
         mockMvc.perform(post("/carteira/comprar")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
@@ -126,6 +139,7 @@ class HttpConfigurationIntegrationTest {
     @Test
     void deveOcultarDetalhesDeJsonInvalido() throws Exception {
         mockMvc.perform(post("/carteira/comprar")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{json-invalido"))
                 .andExpect(status().isBadRequest())

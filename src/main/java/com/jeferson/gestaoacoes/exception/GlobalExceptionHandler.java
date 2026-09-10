@@ -21,6 +21,24 @@ public class GlobalExceptionHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
+    @ExceptionHandler(CredenciaisInvalidasException.class)
+    public ProblemDetail handleCredenciaisInvalidasException(CredenciaisInvalidasException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, ex.getMessage());
+        problemDetail.setTitle("Não autorizado");
+        problemDetail.setType(URI.create("https://gestao-acoes.com/erros/nao-autorizado"));
+        problemDetail.setProperty("timestamp", Instant.now());
+        return problemDetail;
+    }
+
+    @ExceptionHandler(EmailJaCadastradoException.class)
+    public ProblemDetail handleEmailJaCadastradoException(EmailJaCadastradoException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setTitle("Conflito");
+        problemDetail.setType(URI.create("https://gestao-acoes.com/erros/email-ja-cadastrado"));
+        problemDetail.setProperty("timestamp", Instant.now());
+        return problemDetail;
+    }
+
     // Trata as nossas regras de negócio customizadas (Ex: Ticker já existe, CEP inválido)
     @ExceptionHandler(RegraNegocioException.class)
     public ProblemDetail handleRegraNegocioException(RegraNegocioException ex) {
