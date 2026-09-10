@@ -1,3 +1,5 @@
+import { lerTokenJWT, limparTokenJWT } from '../auth/session.js';
+
 const ambiente = import.meta.env ?? {};
 
 const MENSAGENS_POR_TIPO = {
@@ -8,8 +10,43 @@ const MENSAGENS_POR_TIPO = {
 
 export const API_URL = (ambiente.VITE_API_URL || 'http://localhost:8080').replace(/\/$/, '');
 
-export function apiFetch(path, options) {
-    return fetch(`${API_URL}${path}`, options);
+const ENDPOINTS_AUTENTICACAO_PUBLICOS = new Set(['/auth/login', '/auth/register']);
+let tratamentoNaoAutorizado = null;
+
+export function endpointAutenticacaoPublico(path) {
+    return ENDPOINTS_AUTENTICACAO_PUBLICOS.has(String(path).split('?')[0]);
+}
+
+export function configurarTratamentoNaoAutorizado(tratamento) {
+    tratamentoNaoAutorizado = typeof tratamento === 'function' ? tratamento : null;
+    return () => {
+        if (tratamentoNaoAutorizado === tratamento) tratamentoNaoAutorizado = null;
+    };
+}
+
+export async function apiFetch(path, options = {}) {
+    const endpointPublico = endpointAutenticacaoPublico(path);
+    const headers = new Headers(options.headers ?? {});
+
+    if (endpointPublico) {
+        headers.delete('Authorization');
+    } else {
+        const token = lerTokenJWT();
+        if (token) headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    const resposta = await fetch(`${API_URL}${path}`, { ...options, headers });
+
+    if (resposta.status === 401 && !endpointPublico) {
+        limparTokenJWT();
+        try {
+            tratamentoNaoAutorizado?.();
+        } catch {
+            // A resposta original ainda deve chegar ao chamador.
+        }
+    }
+
+    return resposta;
 }
 
 function textoSeguro(valor) {

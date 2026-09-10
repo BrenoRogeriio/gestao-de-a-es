@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import {
     ArrowLeftRight, Building2, CandlestickChart, History, LayoutDashboard, Menu,
-    Moon, Plus, Sun, TrendingUp, Users, WalletCards, X
+    LogOut, Moon, Plus, Sun, TrendingUp, UserCircle, Users, WalletCards, X
 } from 'lucide-react';
+import { identidadeUsuario } from '../../auth/usuario.js';
 
 const NAVEGACAO = [
     {
@@ -24,10 +25,11 @@ const NAVEGACAO = [
     }
 ];
 
-export default function AppLayout({ activePage, onNavigate, page, darkMode, onToggleTheme, children }) {
+export default function AppLayout({ activePage, onNavigate, page, darkMode, onToggleTheme, usuario, onLogout, children }) {
     const [menuOpen, setMenuOpen] = useState(false);
     const sidebarRef = useRef(null);
     const menuTriggerRef = useRef(null);
+    const identidade = identidadeUsuario(usuario);
 
     useEffect(() => {
         if (!menuOpen) return undefined;
@@ -131,10 +133,20 @@ export default function AppLayout({ activePage, onNavigate, page, darkMode, onTo
                         </div>
                     </div>
 
-                    <button className="button button-primary topbar-action" type="button" onClick={() => navegar('operacoes')}>
-                        <Plus size={18} aria-hidden="true" />
-                        <span>Novo lançamento</span>
-                    </button>
+                    <div className="topbar-actions">
+                        <div className="user-summary" title={identidade.email || identidade.nome}>
+                            <UserCircle size={24} aria-hidden="true" />
+                            <span><strong>{identidade.nome}</strong>{identidade.email && <small>{identidade.email}</small>}</span>
+                        </div>
+                        <button className="button button-secondary logout-button" type="button" onClick={onLogout} aria-label="Sair da conta">
+                            <LogOut size={18} aria-hidden="true" />
+                            <span>Sair</span>
+                        </button>
+                        <button className="button button-primary topbar-action" type="button" onClick={() => navegar('operacoes')}>
+                            <Plus size={18} aria-hidden="true" />
+                            <span>Novo lançamento</span>
+                        </button>
+                    </div>
                 </header>
 
                 <main id="main-content" className="main-content" tabIndex="-1">

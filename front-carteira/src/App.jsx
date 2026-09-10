@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react';
+import { ROTAS_POR_PAGINA, navegar, observarNavegacao, resolverAcesso } from './auth/rotas.js';
+import { useAuth } from './auth/useAuth.js';
 import AppLayout from './components/layout/AppLayout.jsx';
+import AuthLoading from './components/auth/AuthLoading.jsx';
+import CadastroPage from './components/auth/CadastroPage.jsx';
+import LoginPage from './components/auth/LoginPage.jsx';
 import HomeBroker from './components/HomeBroker.jsx';
 import Corretoras from './components/corretoras/Corretoras.jsx';
 import ContentState from './components/ui/ContentState.jsx';
@@ -19,47 +24,66 @@ const PAGINAS = {
 };
 
 function App() {
-    const [paginaAtiva, setPaginaAtiva] = useState('dashboard');
+    const { usuario, autenticado, carregando, logout } = useAuth();
+    const [caminho, setCaminho] = useState(() => window.location.pathname);
     const [temaEscuro, setTemaEscuro] = useState(() => localStorage.getItem('tema') === 'escuro');
+    const acesso = resolverAcesso({ caminho, autenticado, carregando });
+
+    useEffect(() => observarNavegacao(() => setCaminho(window.location.pathname)), []);
 
     useEffect(() => {
         localStorage.setItem('tema', temaEscuro ? 'escuro' : 'claro');
     }, [temaEscuro]);
 
-    const renderizarPagina = () => {
+    useEffect(() => {
+        if (acesso.estado === 'redirecionar') navegar(acesso.destino, { substituir: true });
+    }, [acesso.estado, acesso.destino]);
+
+    const alternarTema = () => setTemaEscuro(tema => !tema);
+    const irParaPagina = pagina => navegar(ROTAS_POR_PAGINA[pagina] ?? '/');
+    const sair = () => {
+        logout();
+        navegar('/login', { substituir: true });
+    };
+
+    const renderizarPagina = paginaAtiva => {
         switch (paginaAtiva) {
-            case 'dashboard':
-                return <Dashboard onNavigate={setPaginaAtiva} />;
-            case 'carteira':
-                return <MinhaCarteira onNavigate={setPaginaAtiva} />;
-            case 'historico':
-                return <HistoricoOperacoes />;
-            case 'operacoes':
-                return <HomeBroker />;
-            case 'acoes':
-                return <Acoes />;
-            case 'corretoras':
-                return <Corretoras />;
-            case 'investidores':
-                return <ContentState title="Módulo de investidores" description="Esta área continua reservada para uma etapa futura. Nenhuma autenticação foi implementada." />;
-            default:
-                return null;
+            case 'dashboard': return <Dashboard onNavigate={irParaPagina} />;
+            case 'carteira': return <MinhaCarteira onNavigate={irParaPagina} />;
+            case 'historico': return <HistoricoOperacoes />;
+            case 'operacoes': return <HomeBroker />;
+            case 'acoes': return <Acoes />;
+            case 'corretoras': return <Corretoras />;
+            case 'investidores': return <ContentState title="Módulo de investidores" description="Esta área continua reservada para uma etapa futura." />;
+            default: return null;
         }
     };
 
-    return (
-        <div className={temaEscuro ? 'theme-dark' : 'theme-light'}>
+    let conteudo;
+    if (acesso.estado === 'carregando' || acesso.estado === 'redirecionar') {
+        conteudo = <AuthLoading />;
+    } else if (acesso.estado === 'publica') {
+        conteudo = acesso.rota === '/cadastro'
+            ? <CadastroPage darkMode={temaEscuro} onToggleTheme={alternarTema} />
+            : <LoginPage darkMode={temaEscuro} onToggleTheme={alternarTema} />;
+    } else {
+        const paginaAtiva = acesso.pagina;
+        conteudo = (
             <AppLayout
                 activePage={paginaAtiva}
-                onNavigate={setPaginaAtiva}
+                onNavigate={irParaPagina}
                 page={PAGINAS[paginaAtiva]}
                 darkMode={temaEscuro}
-                onToggleTheme={() => setTemaEscuro(tema => !tema)}
+                onToggleTheme={alternarTema}
+                usuario={usuario}
+                onLogout={sair}
             >
-                {renderizarPagina()}
+                {renderizarPagina(paginaAtiva)}
             </AppLayout>
-        </div>
-    );
+        );
+    }
+
+    return <div className={temaEscuro ? 'theme-dark' : 'theme-light'}>{conteudo}</div>;
 }
 
 export default App;
