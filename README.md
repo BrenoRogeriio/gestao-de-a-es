@@ -72,38 +72,162 @@ Não reutilize os placeholders do exemplo em produção e nunca coloque segredos
 
 ## Execução com Docker Compose
 
-1. Configure o `.env` local.
-2. Inicie o Docker Desktop.
-3. Na raiz do projeto, execute:
+### 1. Pré-requisitos
+
+Instale o Docker Desktop no Windows ou macOS. No Linux, instale o Docker Engine e o plugin Docker Compose. Confirme a instalação:
+
+```bash
+docker --version
+docker compose version
+```
+
+### 2. Entrar na raiz do projeto
+
+Execute todos os comandos Docker na raiz deste repositório, na pasta que contém o arquivo `compose.yaml`.
+
+### 3. Criar e configurar o `.env`
+
+No Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+No Linux ou macOS:
+
+```bash
+cp .env.example .env
+```
+
+Preencha o `.env` com valores próprios para as variáveis existentes em `.env.example`, incluindo credenciais do PostgreSQL, chaves das APIs externas, segredo JWT, portas e origens CORS. Não coloque segredos no README e nunca envie o arquivo `.env` ao GitHub.
+
+### 4. Subir o projeto
 
 ```bash
 docker compose up -d --build
 ```
 
-Serviços locais:
+O comando constrói e inicia o PostgreSQL 17, o backend Spring Boot/Java 21 e o frontend React/Vite servido pelo Nginx. Na primeira execução, downloads de imagens, dependências e builds podem levar alguns minutos.
 
-| Serviço | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| Backend | http://localhost:8080 |
-| Health | http://localhost:8080/actuator/health |
-| Swagger UI em `dev` | http://localhost:8080/swagger-ui/index.html |
-| OpenAPI JSON em `dev` | http://localhost:8080/v3/api-docs |
-
-O backend só é considerado saudável quando `/actuator/health` responde com `UP`. Para acompanhar os serviços:
+### 5. Conferir os containers
 
 ```bash
 docker compose ps
+```
+
+Resultado esperado:
+
+- `postgres`: `healthy`;
+- `aplicacao`: `healthy`;
+- `frontend`: `up`.
+
+### 6. Acompanhar os logs do backend
+
+```bash
 docker compose logs -f aplicacao
 ```
 
-Para parar sem apagar dados:
+Pressione `Ctrl+C` para encerrar somente o acompanhamento dos logs. Os containers continuarão em execução.
+
+### 7. Verificar o health check
+
+Abra http://localhost:8080/actuator/health ou execute no PowerShell:
+
+```powershell
+Invoke-RestMethod http://localhost:8080/actuator/health
+```
+
+O resultado esperado contém `status` igual a `UP`.
+
+### 8. Acessar o sistema
+
+| Serviço | URL |
+|---|---|
+| Frontend React/Nginx | http://localhost:5173 |
+| Backend Spring Boot | http://localhost:8080 |
+| Swagger UI, quando habilitado | http://localhost:8080/swagger-ui/index.html |
+
+Frontend e backend são publicados em portas diferentes. O Swagger fica disponível somente quando `SWAGGER_ENABLED=true`; a configuração padrão do Compose o mantém desabilitado.
+
+### 9. Operação do dia a dia
+
+Parar os containers sem removê-los:
+
+```bash
+docker compose stop
+```
+
+Retomar os containers parados:
+
+```bash
+docker compose start
+```
+
+Remover os containers e a rede, mantendo o volume e os dados do PostgreSQL:
 
 ```bash
 docker compose down
 ```
 
-`docker compose down -v` remove os volumes e os dados do PostgreSQL. Não use essa opção casualmente.
+Reconstruir e iniciar todo o ambiente:
+
+```bash
+docker compose up -d --build
+```
+
+Reconstruir o backend:
+
+```bash
+docker compose up -d --build aplicacao
+```
+
+Reconstruir o frontend:
+
+```bash
+docker compose up -d --build frontend
+```
+
+Consultar os logs de cada serviço:
+
+```bash
+docker compose logs aplicacao
+docker compose logs frontend
+docker compose logs postgres
+```
+
+### 10. Atenção com os dados do banco
+
+Os comandos abaixo removem também o volume persistente do PostgreSQL e podem apagar os dados armazenados:
+
+```bash
+docker compose down -v
+docker compose down --volumes
+```
+
+> ⚠️ Não utilize `docker compose down -v` se quiser preservar os dados do banco.
+
+### 11. Executar somente o PostgreSQL
+
+Para iniciar apenas o banco, por exemplo quando o backend for executado pelo IntelliJ:
+
+```bash
+docker compose up -d postgres
+```
+
+Fora da rede interna do Docker, conecte o backend ao PostgreSQL por `localhost` e pela porta definida em `POSTGRES_PORT`. O hostname `postgres` é o nome do serviço dentro da rede do Compose e não deve ser usado pelo backend executado diretamente no computador host.
+
+### 12. Acesso pela rede local
+
+No Windows, execute `ipconfig` e identifique o endereço IPv4 atual do computador host. Não fixe esse endereço na documentação, pois ele pode mudar.
+
+Para acessar o sistema por outro dispositivo da rede:
+
+- libere as portas `5173` e `8080` no firewall do computador host;
+- configure `CORS_ALLOWED_ORIGINS` no `.env` com a origem exata do frontend, por exemplo `http://<IP_DO_HOST>:5173`;
+- configure `VITE_API_URL=http://<IP_DO_HOST>:8080` no ambiente de build do frontend;
+- reconstrua o frontend com `docker compose up -d --build frontend` após alterar `VITE_API_URL`.
+
+`VITE_API_URL` é incorporada ao bundle durante o build do Vite. Não basta reiniciar o container depois de alterar esse valor, e o backend não deve usar uma origem CORS genérica com `*`.
 
 ## Backend sem Docker
 
