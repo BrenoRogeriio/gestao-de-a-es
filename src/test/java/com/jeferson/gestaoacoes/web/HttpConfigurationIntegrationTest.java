@@ -2,6 +2,7 @@ package com.jeferson.gestaoacoes.web;
 
 import com.jeferson.gestaoacoes.config.HttpConfiguration;
 import com.jeferson.gestaoacoes.config.SecurityHeadersFilter;
+import com.jeferson.gestaoacoes.config.RequestObservabilityFilter;
 import com.jeferson.gestaoacoes.controller.CarteiraController;
 import com.jeferson.gestaoacoes.exception.GlobalExceptionHandler;
 import com.jeferson.gestaoacoes.exception.ProvedorExternoIndisponivelException;
@@ -50,7 +51,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
                 type = FilterType.ASSIGNABLE_TYPE,
                 classes = JwtAuthenticationFilter.class)
 )
-@Import({HttpConfiguration.class, SecurityHeadersFilter.class, GlobalExceptionHandler.class})
+@Import({HttpConfiguration.class, SecurityHeadersFilter.class, RequestObservabilityFilter.class,
+        GlobalExceptionHandler.class})
 @WithMockUser
 class HttpConfigurationIntegrationTest {
 
@@ -88,14 +90,16 @@ class HttpConfigurationIntegrationTest {
                         .header(HttpHeaders.ORIGIN, ORIGEM_DEV)
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
-                                "Content-Type, Authorization, Idempotency-Key"))
+                                "Content-Type, Authorization, Idempotency-Key, X-Request-Id"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGEM_DEV))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, containsString("POST")))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
                         containsString("Idempotency-Key")))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
-                        containsString("Authorization")));
+                        containsString("Authorization")))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                        containsString("X-Request-Id")));
     }
 
     @Test

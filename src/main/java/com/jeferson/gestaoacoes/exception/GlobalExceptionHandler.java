@@ -109,7 +109,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ProblemDetail handleUnexpectedException(Exception ex) {
-        LOGGER.error("Erro interno não tratado durante o processamento da requisição", ex);
+        LOGGER.error("Erro interno não tratado durante o processamento da requisição exceptionType={}",
+                ex.getClass().getSimpleName());
         ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(
                 HttpStatus.INTERNAL_SERVER_ERROR, "Ocorreu um erro interno. Tente novamente mais tarde.");
         problemDetail.setTitle("Erro interno");

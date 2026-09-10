@@ -33,7 +33,8 @@ public class HttpConfiguration implements WebMvcConfigurer {
         registry.addMapping("/**")
                 .allowedOrigins(allowedOrigins)
                 .allowedMethods("GET", "POST", "PUT", "OPTIONS")
-                .allowedHeaders("Content-Type", "Authorization", "Idempotency-Key")
+                .allowedHeaders("Content-Type", "Authorization", "Idempotency-Key", "X-Request-Id")
+                .exposedHeaders("X-Request-Id")
                 .allowCredentials(false)
                 .maxAge(3600);
     }

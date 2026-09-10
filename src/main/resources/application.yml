@@ -29,3 +29,20 @@ app:
     cors:
       # Sem profile/origem explicita, requisicoes cross-origin sao negadas.
       allowed-origins: ${CORS_ALLOWED_ORIGINS:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+  info:
+    env:
+      enabled: true
+
+info:
+  application:
+    name: ${spring.application.name}
+    description: API de gestão de ações e carteiras multiusuário

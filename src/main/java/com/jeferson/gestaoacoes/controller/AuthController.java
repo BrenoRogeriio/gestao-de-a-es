@@ -6,6 +6,7 @@ import com.jeferson.gestaoacoes.dto.LoginRequestDTO;
 import com.jeferson.gestaoacoes.dto.UsuarioAutenticadoDTO;
 import com.jeferson.gestaoacoes.security.UsuarioPrincipal;
 import com.jeferson.gestaoacoes.service.AutenticacaoService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,11 +28,13 @@ public class AuthController {
     }
 
     @PostMapping("/register")
+    @SecurityRequirements
     public ResponseEntity<AutenticacaoResponseDTO> cadastrar(@Valid @RequestBody CadastroRequestDTO dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.cadastrar(dto));
     }
 
     @PostMapping("/login")
+    @SecurityRequirements
     public ResponseEntity<AutenticacaoResponseDTO> autenticar(@Valid @RequestBody LoginRequestDTO dto) {
         return ResponseEntity.ok(service.autenticar(dto));
     }
