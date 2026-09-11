@@ -56,7 +56,7 @@ Copie `.env.example` para `.env` apenas no ambiente local e substitua os placeho
 Variáveis principais:
 
 | Variável | Finalidade |
-|---|---|
+| --- | --- |
 | `SPRING_PROFILES_ACTIVE` | Profile Spring, normalmente `dev` localmente ou `prod` em produção |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | Conexão direta do backend ao PostgreSQL |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Inicialização do PostgreSQL no Compose |
@@ -142,12 +142,12 @@ O resultado esperado contém `status` igual a `UP`.
 ### 8. Acessar o sistema
 
 | Serviço | URL |
-|---|---|
+| --- | --- |
 | Frontend React/Nginx | http://localhost:5173 |
 | Backend Spring Boot | http://localhost:8080 |
-| Swagger UI, quando habilitado | http://localhost:8080/swagger-ui/index.html |
+| Swagger UI (`dev`; `prod` quando habilitado) | http://localhost:8080/swagger-ui/index.html |
 
-Frontend e backend são publicados em portas diferentes. O Swagger fica disponível somente quando `SWAGGER_ENABLED=true`; a configuração padrão do Compose o mantém desabilitado.
+Frontend e backend são publicados em portas diferentes. O Compose usa o profile `dev` por padrão, no qual Swagger UI e OpenAPI ficam habilitados. No profile `prod`, ambos dependem de `SWAGGER_ENABLED=true` e permanecem desabilitados por padrão.
 
 ### 9. Operação do dia a dia
 
@@ -278,7 +278,7 @@ Registros financeiros anteriores ao isolamento permanecem no banco com `usuario_
 ## APIs externas
 
 | Provedor | Uso | Credencial |
-|---|---|---|
+| --- | --- | --- |
 | ViaCEP | endereço por CEP | não exige |
 | BrasilAPI | CNPJ e situação de corretora na CVM | não exige |
 | Brapi | ações e cotações brasileiras | `BRAPI_TOKEN` |
@@ -292,7 +292,7 @@ O Liquibase executa os changeSets de `src/main/resources/db/changelog`. O profil
 
 ## OpenAPI e observabilidade
 
-O Swagger declara autenticação HTTP Bearer JWT e oferece o botão **Authorize**. `/auth/register` e `/auth/login` continuam públicos. Swagger permanece habilitado em `dev/test` e desabilitado por padrão em `prod`.
+O Swagger declara autenticação HTTP Bearer JWT e oferece o botão **Authorize**. `/auth/register` e `/auth/login` continuam públicos. Os profiles `dev` e `test` habilitam Swagger UI e OpenAPI. No profile `prod`, ambos seguem `SWAGGER_ENABLED` e ficam desabilitados por padrão.
 
 - `GET /actuator/health`: público, retorna apenas o estado geral;
 - `GET /actuator/info`: exige autenticação e fornece metadados mínimos;
@@ -333,7 +333,7 @@ src/main/resources/      configurações e changelogs Liquibase
 src/test/                testes backend e Testcontainers
 front-carteira/          frontend React/Vite
 docs/                    arquitetura e referência da API
-graphify-out/            grafo de conhecimento do projeto
+graphify-out/            artefato gerado localmente pelo Graphify e ignorado pelo Git
 compose.yaml             stack local PostgreSQL, backend e frontend
 ```
 
