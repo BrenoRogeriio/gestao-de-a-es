@@ -13,10 +13,13 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.nio.charset.StandardCharsets;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -24,6 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.url=jdbc:h2:mem:corretora-exclusao;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000")
 @AutoConfigureMockMvc
 class CorretoraExclusaoIntegrationTest {
+
+    private static final String ORIGEM_DEV = "http://localhost:5173";
 
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
@@ -43,16 +48,37 @@ class CorretoraExclusaoIntegrationTest {
 
     @Test
     void deleteSemJwtDeveRetornar401() throws Exception {
-        mockMvc.perform(delete("/corretoras/1"))
+        mockMvc.perform(delete("/corretoras/1")
+                        .header(HttpHeaders.ORIGIN, ORIGEM_DEV))
                 .andExpect(status().isUnauthorized())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGEM_DEV))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+    }
+
+    @Test
+    void preflightDoDeleteDeveAceitarOrigemEHeadersAutorizados() throws Exception {
+        mockMvc.perform(options("/corretoras/2")
+                        .header(HttpHeaders.ORIGIN, ORIGEM_DEV)
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "DELETE")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS,
+                                "Authorization, Idempotency-Key"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGEM_DEV))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS,
+                        containsString("DELETE")))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                        containsString("Authorization")))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS,
+                        containsString("Idempotency-Key")));
     }
 
     @Test
     void excluirCorretoraInexistenteDeveRetornar404() throws Exception {
         mockMvc.perform(delete("/corretoras/999999")
+                        .header(HttpHeaders.ORIGIN, ORIGEM_DEV)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNotFound())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGEM_DEV))
                 .andExpect(jsonPath("$.detail").value("Corretora não encontrada."));
     }
 
@@ -61,8 +87,10 @@ class CorretoraExclusaoIntegrationTest {
         Long corretoraId = inserirCorretora("11111111000191", "Corretora sem operações");
 
         mockMvc.perform(delete("/corretoras/{id}", corretoraId)
+                        .header(HttpHeaders.ORIGIN, ORIGEM_DEV)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isNoContent())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGEM_DEV))
                 .andExpect(content().string(""));
 
         assertEquals(0, contar("SELECT COUNT(*) FROM corretoras WHERE id = ?", corretoraId));
@@ -85,8 +113,10 @@ class CorretoraExclusaoIntegrationTest {
                 """, acaoId, usuarioId);
 
         mockMvc.perform(delete("/corretoras/{id}", corretoraId)
+                        .header(HttpHeaders.ORIGIN, ORIGEM_DEV)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
                 .andExpect(status().isConflict())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ORIGEM_DEV))
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.detail").value(
                         "Não é possível excluir a corretora porque existem operações vinculadas."));

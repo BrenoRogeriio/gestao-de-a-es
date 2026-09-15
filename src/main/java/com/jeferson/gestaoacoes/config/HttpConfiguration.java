@@ -32,7 +32,7 @@ public class HttpConfiguration implements WebMvcConfigurer {
 
         registry.addMapping("/**")
                 .allowedOrigins(allowedOrigins)
-                .allowedMethods("GET", "POST", "PUT", "OPTIONS")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("Content-Type", "Authorization", "Idempotency-Key", "X-Request-Id")
                 .exposedHeaders("X-Request-Id")
                 .allowCredentials(false)
