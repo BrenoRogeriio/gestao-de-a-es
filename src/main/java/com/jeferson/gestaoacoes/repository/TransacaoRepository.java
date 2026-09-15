@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Optional;
 
 public interface TransacaoRepository extends JpaRepository<Transacao, Long> {
+    boolean existsByCorretoraId(Long corretoraId);
+
     Optional<Transacao> findByUsuarioIdAndIdempotencyKey(Long usuarioId, String idempotencyKey);
 
     List<Transacao> findAllByUsuarioIdOrderByDataHoraTransacaoDesc(Long usuarioId);

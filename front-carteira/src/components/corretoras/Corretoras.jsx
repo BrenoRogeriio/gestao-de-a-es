@@ -11,6 +11,7 @@ import ErrorState from '../ui/ErrorState.jsx';
 import LoadingState from '../ui/LoadingState.jsx';
 import PageHeader from '../ui/PageHeader.jsx';
 import CorretoraFormModal from './CorretoraFormModal.jsx';
+import CorretoraDeleteModal from './CorretoraDeleteModal.jsx';
 import CorretorasFiltros from './CorretorasFiltros.jsx';
 import CorretorasLista from './CorretorasLista.jsx';
 
@@ -29,6 +30,7 @@ export default function Corretoras() {
     const [atualizando, setAtualizando] = useState(false);
     const [erro, setErro] = useState(false);
     const [modalAberto, setModalAberto] = useState(false);
+    const [corretoraParaExcluir, setCorretoraParaExcluir] = useState(null);
     const [feedback, setFeedback] = useState(null);
 
     const aplicarDados = dados => {
@@ -80,6 +82,16 @@ export default function Corretoras() {
             : { tone: 'warning', message: 'A instituição foi cadastrada, mas a lista não pôde ser atualizada agora.' });
     };
 
+    const exclusaoConcluida = corretora => {
+        setCorretoras(atuais => atuais.filter(item => item.id !== corretora.id));
+        setTotal(atual => Math.max(0, atual - 1));
+        setCorretoraParaExcluir(null);
+        setFeedback({
+            tone: 'success',
+            message: `${corretora.nomeFantasia || corretora.razaoSocial || 'Instituição'} excluída com sucesso.`
+        });
+    };
+
     const modelo = criarModeloCorretoras({ loading: carregando, error: erro, corretoras, total, ...filtros });
     const filtrosAtivos = Boolean(filtros.busca.trim()) || filtros.situacao !== SITUACAO_TODAS;
 
@@ -102,11 +114,12 @@ export default function Corretoras() {
                     <CorretorasFiltros filtros={filtros} onChange={setFiltros} onClear={() => setFiltros(FILTROS_INICIAIS)} />
                     {modelo.estado === 'filtered-empty'
                         ? <EmptyState title="Nenhuma instituição encontrada" description="Nenhuma corretora corresponde à busca ou à situação selecionada." action={<button className="button button-secondary" type="button" onClick={() => setFiltros(FILTROS_INICIAIS)}>Limpar filtros</button>} />
-                        : <CorretorasLista modelo={modelo} resumo={resumoCorretoras(modelo, filtrosAtivos)} />}
+                        : <CorretorasLista modelo={modelo} resumo={resumoCorretoras(modelo, filtrosAtivos)} onDelete={setCorretoraParaExcluir} />}
                 </>
             )}
             {atualizando && <span className="brokers-refreshing" role="status">Atualizando lista…</span>}
             {modalAberto && <CorretoraFormModal onClose={() => setModalAberto(false)} onSuccess={cadastrarConcluido} />}
+            {corretoraParaExcluir && <CorretoraDeleteModal corretora={corretoraParaExcluir} onClose={() => setCorretoraParaExcluir(null)} onSuccess={exclusaoConcluida} />}
         </div>
     );
 }

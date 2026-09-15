@@ -55,4 +55,10 @@ public class CorretoraController {
                 .map(ResponseEntity::ok)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Corretora não encontrada com este CNPJ."));
     }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> excluir(@PathVariable Long id) {
+        service.excluir(id);
+        return ResponseEntity.noContent().build();
+    }
 }

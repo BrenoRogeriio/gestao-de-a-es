@@ -1,4 +1,4 @@
-import { Building2, ChevronDown, Mail, MapPin, Phone } from 'lucide-react';
+import { Building2, ChevronDown, Mail, MapPin, Phone, Trash2 } from 'lucide-react';
 import {
     enderecoCorretora,
     formatarCnpj,
@@ -40,7 +40,11 @@ function DetalhesEndereco({ corretora }) {
     );
 }
 
-export default function CorretorasLista({ modelo, resumo }) {
+function BotaoExcluir({ corretora, onDelete }) {
+    return <button className="button button-secondary broker-delete-trigger" type="button" onClick={() => onDelete(corretora)} aria-label={`Excluir ${nomeDaCorretora(corretora)}`}><Trash2 size={15} aria-hidden="true" /> Excluir</button>;
+}
+
+export default function CorretorasLista({ modelo, resumo, onDelete }) {
     return (
         <Card className="brokers-list" aria-labelledby="brokers-list-title">
             <div className="brokers-list-header">
@@ -49,7 +53,7 @@ export default function CorretorasLista({ modelo, resumo }) {
             </div>
             <div className="brokers-table-wrap">
                 <table className="data-table brokers-table">
-                    <thead><tr><th scope="col">Instituição</th><th scope="col">CNPJ</th><th scope="col">Situação</th><th scope="col">CVM</th><th scope="col">Localização</th><th scope="col">Contato</th></tr></thead>
+                    <thead><tr><th scope="col">Instituição</th><th scope="col">CNPJ</th><th scope="col">Situação</th><th scope="col">CVM</th><th scope="col">Localização</th><th scope="col">Contato</th><th scope="col"><span className="sr-only">Ações</span></th></tr></thead>
                     <tbody>{modelo.corretoras.map(corretora => (
                         <tr key={corretora.id}>
                             <td><IdentidadeCorretora corretora={corretora} /></td>
@@ -58,6 +62,7 @@ export default function CorretorasLista({ modelo, resumo }) {
                             <td><StatusCvm corretora={corretora} /></td>
                             <td><div className="broker-location"><span><MapPin size={14} aria-hidden="true" />{localizacaoCorretora(corretora)}</span><DetalhesEndereco corretora={corretora} /></div></td>
                             <td><Contato corretora={corretora} /></td>
+                            <td><BotaoExcluir corretora={corretora} onDelete={onDelete} /></td>
                         </tr>
                     ))}</tbody>
                 </table>
@@ -73,6 +78,7 @@ export default function CorretorasLista({ modelo, resumo }) {
                             <div className="broker-card-contact"><dt>Contato</dt><dd><Contato corretora={corretora} /></dd></div>
                         </dl>
                         <DetalhesEndereco corretora={corretora} />
+                        <BotaoExcluir corretora={corretora} onDelete={onDelete} />
                     </article>
                 ))}
             </div>

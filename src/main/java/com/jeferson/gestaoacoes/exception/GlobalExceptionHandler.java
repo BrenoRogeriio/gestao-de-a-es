@@ -39,6 +39,15 @@ public class GlobalExceptionHandler {
         return problemDetail;
     }
 
+    @ExceptionHandler(CorretoraEmUsoException.class)
+    public ProblemDetail handleCorretoraEmUsoException(CorretoraEmUsoException ex) {
+        ProblemDetail problemDetail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problemDetail.setTitle("Conflito");
+        problemDetail.setType(URI.create("https://gestao-acoes.com/erros/corretora-em-uso"));
+        problemDetail.setProperty("timestamp", Instant.now());
+        return problemDetail;
+    }
+
     // Trata as nossas regras de negócio customizadas (Ex: Ticker já existe, CEP inválido)
     @ExceptionHandler(RegraNegocioException.class)
     public ProblemDetail handleRegraNegocioException(RegraNegocioException ex) {

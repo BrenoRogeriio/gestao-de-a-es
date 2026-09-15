@@ -2,6 +2,7 @@ package com.jeferson.gestaoacoes.service;
 
 import com.jeferson.gestaoacoes.dto.CorretoraRequestDTO;
 import com.jeferson.gestaoacoes.exception.ProvedorExternoIndisponivelException;
+import com.jeferson.gestaoacoes.exception.CorretoraEmUsoException;
 import com.jeferson.gestaoacoes.exception.RegraNegocioException;
 import com.jeferson.gestaoacoes.exception.RespostaExternaInvalidaException;
 import com.jeferson.gestaoacoes.infrastructure.client.BrasilApiClient;
@@ -12,6 +13,7 @@ import com.jeferson.gestaoacoes.infrastructure.client.ViaCepResponse;
 import com.jeferson.gestaoacoes.mapper.CorretoraMapper;
 import com.jeferson.gestaoacoes.model.Corretora;
 import com.jeferson.gestaoacoes.repository.CorretoraRepository;
+import com.jeferson.gestaoacoes.repository.TransacaoRepository;
 import feign.FeignException;
 import feign.Request;
 import feign.Response;
@@ -24,6 +26,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -40,10 +43,38 @@ class CorretoraServiceTest {
     private static final String CEP = "22440032";
 
     @Mock private CorretoraRepository repository;
+    @Mock private TransacaoRepository transacaoRepository;
     @Mock private CorretoraMapper mapper;
     @Mock private BrasilApiClient brasilApiClient;
     @Mock private ViaCepClient viaCepClient;
     @InjectMocks private CorretoraService service;
+
+    @Test
+    void deveExcluirCorretoraSemTransacoes() {
+        Corretora corretora = new Corretora();
+        corretora.setId(7L);
+        when(repository.findById(7L)).thenReturn(Optional.of(corretora));
+
+        service.excluir(7L);
+
+        verify(transacaoRepository).existsByCorretoraId(7L);
+        verify(repository).delete(corretora);
+    }
+
+    @Test
+    void naoDeveExcluirCorretoraComTransacoes() {
+        Corretora corretora = new Corretora();
+        corretora.setId(7L);
+        when(repository.findById(7L)).thenReturn(Optional.of(corretora));
+        when(transacaoRepository.existsByCorretoraId(7L)).thenReturn(true);
+
+        CorretoraEmUsoException excecao = assertThrows(CorretoraEmUsoException.class,
+                () -> service.excluir(7L));
+
+        assertEquals("Não é possível excluir a corretora porque existem operações vinculadas.",
+                excecao.getMessage());
+        verify(repository, never()).delete(any());
+    }
 
     @Test
     void deveCadastrarCorretoraComCnpjNormalizadoERespostasValidas() {

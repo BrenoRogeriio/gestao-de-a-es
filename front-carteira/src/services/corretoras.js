@@ -31,3 +31,8 @@ export async function consultarCorretoraPorId(id, signal, request = apiFetch) {
     if (!resposta.ok) throw await erroCorretoraDaResposta(resposta, 'Não foi possível carregar a instituição.');
     return resposta.json();
 }
+
+export async function excluirCorretora(id, request = apiFetch) {
+    const resposta = await request(`/corretoras/${id}`, { method: 'DELETE' });
+    if (!resposta.ok) throw await erroCorretoraDaResposta(resposta, 'Não foi possível excluir a instituição.');
+}

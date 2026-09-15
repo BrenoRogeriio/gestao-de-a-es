@@ -5,6 +5,7 @@ import {
     cadastrarCorretora,
     consultarCorretoraPorId,
     consultarCorretoras,
+    excluirCorretora,
     erroCorretoraDaResposta
 } from '../services/corretoras.js';
 import {
@@ -168,6 +169,43 @@ test('consulta GET por id sem alterar o contrato', async () => {
     });
     assert.equal(caminho, '/corretoras/7');
     assert.equal(encontrada.id, 7);
+});
+test('envia DELETE e aceita resposta 204 sem tentar ler corpo', async () => {
+    let chamada;
+    await excluirCorretora(7, async (path, options) => {
+        chamada = { path, options };
+        return { ok: true, status: 204 };
+    });
+    assert.deepEqual(chamada, { path: '/corretoras/7', options: { method: 'DELETE' } });
+});
+test('exclusão bloqueada mostra a mensagem amigável do ProblemDetail 409', async () => {
+    await assert.rejects(
+        excluirCorretora(7, async () => resposta({ detail: 'Não é possível excluir a corretora porque existem operações vinculadas.' }, { ok: false, status: 409 })),
+        /existem operações vinculadas/
+    );
+});
+test('lista apresenta botão Excluir e abre confirmação explícita', async () => {
+    const lista = await readFile(new URL('../components/corretoras/CorretorasLista.jsx', import.meta.url), 'utf8');
+    const modal = await readFile(new URL('../components/corretoras/CorretoraDeleteModal.jsx', import.meta.url), 'utf8');
+    assert.match(lista, /> Excluir<\/button>/);
+    assert.match(modal, /Excluir esta corretora\?/);
+    assert.match(modal, /só será permitida se não existirem operações vinculadas/);
+});
+test('cancelamento fecha o modal sem executar a função de exclusão', async () => {
+    const modal = await readFile(new URL('../components/corretoras/CorretoraDeleteModal.jsx', import.meta.url), 'utf8');
+    assert.match(modal, /type="button" disabled=\{excluindo\} onClick=\{onClose\}>Cancelar/);
+    assert.match(modal, /onSubmit=\{confirmar\}/);
+});
+test('sucesso remove a corretora da lista e atualiza o total', async () => {
+    const pagina = await readFile(new URL('../components/corretoras/Corretoras.jsx', import.meta.url), 'utf8');
+    assert.match(pagina, /exclusaoConcluida[\s\S]*filter\(item => item\.id !== corretora\.id\)/);
+    assert.match(pagina, /setTotal\(atual => Math\.max\(0, atual - 1\)\)/);
+});
+test('confirmação exibe loading e impede envio duplicado durante a exclusão', async () => {
+    const modal = await readFile(new URL('../components/corretoras/CorretoraDeleteModal.jsx', import.meta.url), 'utf8');
+    assert.match(modal, /if \(excluindoRef\.current\) return/);
+    assert.match(modal, /disabled=\{excluindo\}/);
+    assert.match(modal, /Excluindo…/);
 });
 test('recarrega a lista após cadastro', async () => {
     const pagina = await readFile(new URL('../components/corretoras/Corretoras.jsx', import.meta.url), 'utf8');

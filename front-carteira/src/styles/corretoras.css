@@ -126,7 +126,7 @@
 }
 
 .brokers-table {
-  min-width: 1020px;
+  min-width: 1130px;
 }
 
 .brokers-table th,
@@ -210,6 +210,17 @@
   font-size: 0.74rem;
 }
 
+.broker-delete-trigger {
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  color: var(--color-danger);
+  white-space: nowrap;
+}
+
+.broker-delete-trigger:hover {
+  border-color: var(--color-danger);
+}
+
 .broker-details summary {
   display: inline-flex;
   align-items: center;
@@ -279,6 +290,32 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-lg);
+}
+
+.broker-delete-modal {
+  width: min(100%, 520px);
+}
+
+.broker-delete-icon {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.broker-delete-content {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-6);
+}
+
+.broker-delete-content > p {
+  margin: 0;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.broker-delete-confirm {
+  color: #fff;
+  background: var(--color-danger);
 }
 
 .broker-modal-header {
@@ -475,7 +512,8 @@
   }
 
   .broker-modal-header,
-  .broker-form {
+  .broker-form,
+  .broker-delete-content {
     padding: var(--space-5);
   }
 
@@ -485,6 +523,10 @@
   }
 
   .broker-modal-actions .button-primary {
+    grid-row: 1;
+  }
+
+  .broker-modal-actions .broker-delete-confirm {
     grid-row: 1;
   }
 }

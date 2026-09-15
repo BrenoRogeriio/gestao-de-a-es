@@ -3,15 +3,19 @@ package com.jeferson.gestaoacoes.service;
 import com.jeferson.gestaoacoes.dto.CorretoraRequestDTO;
 import com.jeferson.gestaoacoes.dto.CorretoraResponseDTO;
 import com.jeferson.gestaoacoes.exception.ProvedorExternoIndisponivelException;
+import com.jeferson.gestaoacoes.exception.CorretoraEmUsoException;
 import com.jeferson.gestaoacoes.exception.RegraNegocioException;
 import com.jeferson.gestaoacoes.exception.RespostaExternaInvalidaException;
 import com.jeferson.gestaoacoes.infrastructure.client.*;
 import com.jeferson.gestaoacoes.mapper.CorretoraMapper;
 import com.jeferson.gestaoacoes.model.Corretora;
 import com.jeferson.gestaoacoes.repository.CorretoraRepository;
+import com.jeferson.gestaoacoes.repository.TransacaoRepository;
 import feign.FeignException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.text.Normalizer;
 import java.time.OffsetDateTime;
@@ -21,13 +25,16 @@ import java.util.Locale;
 public class CorretoraService {
 
     private final CorretoraRepository repository;
+    private final TransacaoRepository transacaoRepository;
     private final CorretoraMapper mapper;
     private final BrasilApiClient brasilApiClient;
     private final ViaCepClient viaCepClient;
 
-    public CorretoraService(CorretoraRepository repository, CorretoraMapper mapper,
+    public CorretoraService(CorretoraRepository repository, TransacaoRepository transacaoRepository,
+                            CorretoraMapper mapper,
                             BrasilApiClient brasilApiClient, ViaCepClient viaCepClient) {
         this.repository = repository;
+        this.transacaoRepository = transacaoRepository;
         this.mapper = mapper;
         this.brasilApiClient = brasilApiClient;
         this.viaCepClient = viaCepClient;
@@ -75,6 +82,19 @@ public class CorretoraService {
         // 6. Salvar no banco e retornar
         Corretora corretoraSalva = repository.save(corretora);
         return mapper.toResponseDTO(corretoraSalva);
+    }
+
+    @Transactional
+    public void excluir(Long id) {
+        Corretora corretora = repository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Corretora não encontrada."));
+
+        if (transacaoRepository.existsByCorretoraId(id)) {
+            throw new CorretoraEmUsoException(
+                    "Não é possível excluir a corretora porque existem operações vinculadas.");
+        }
+
+        repository.delete(corretora);
     }
 
     private BrasilApiCnpjResponse consultarEValidarCnpj(String cnpj) {
